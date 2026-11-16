@@ -1,0 +1,46 @@
+{
+  "paths": {
+    "raw": "/srv/finance/raw",
+    "normalized": "/srv/finance/normalized",
+    "secrets": "/srv/ingest-secrets",
+    "banks": "/opt/ingest/ingest/banks",
+    "bundles": "/srv/ingest-state/bundles",
+    "review": "/srv/ingest-state/review",
+    "repair_queue": "/srv/ingest-state/repair-queue"
+  },
+  "browser": {"channel": "chrome", "headless": false, "chromium_sandbox": false},
+  "mfa": {
+    "bind": "0.0.0.0",
+    "port": 8765,
+    "public_base": "http://FINANCE_VM_TAILNET_NAME:8765",
+    "timeout_s": 300
+  },
+  "ntfy": {
+    "url": "http://NTFY_HOST",
+    "topic": "finance-sync",
+    "token_file": "/srv/ingest-secrets/ntfy_token"
+  },
+  "sure": {"url": "http://web:3000", "api_key_file": "/run/secrets/sure_api_key"},
+  "repair": {
+    "url": "http://MAIN_PC_LAN_IP:11434",
+    "model": "qwen2.5:7b-instruct-q4_K_M",
+    "sensitive_file": "/srv/ingest-secrets/sensitive.json"
+  },
+  "accounts": {
+    "simplii:chequing": "Simplii Chequing",
+    "sunlife:rrsp": "Sun Life Group RRSP"
+  },
+  "formats": {
+    "simplii": {"parser": "simplii"},
+    "sunlife": {"parser": "sunlife_pdf"},
+    "amex": {
+      "parser": "mapped_csv",
+      "_unverified": "US-style export guess: Date, Description, Amount (positive = charge). Confirm CA vs US and fix.",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount",
+      "sign": -1,
+      "currency": "CAD"
+    }
+  }
+}

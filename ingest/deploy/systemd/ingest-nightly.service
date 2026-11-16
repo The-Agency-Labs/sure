@@ -1,0 +1,11 @@
+[Unit]
+Description=Finance ingest: scrape banks, then load into Sure
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+RequiresMountsFor=/srv/finance
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ingest/ingest/deploy/ingest/nightly.sh
+TimeoutStartSec=3h
+Nice=10

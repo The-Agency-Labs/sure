@@ -1,0 +1,35 @@
+{
+  "placeholder": true,
+  "institution": "simplii",
+  "currency": "CAD",
+  "allowlist": {
+    "navigation": [
+      "^https://online\\.simplii\\.com/ebm-resources/public/client/web/index\\.html(#/(signon|accounts|my-accounts|account-details|download-transactions)?.*)?$"
+    ],
+    "hosts": ["simplii.com", "cibc.com"],
+    "post": ["^https://online\\.simplii\\.com/ebm-anp/api/v1/json/sessions$"],
+    "block": ["#/(move-money|pay|send)", "upcoming-transactions"]
+  },
+  "login": [
+    {"action": "goto", "intent": "open the sign-on page", "url": "https://online.simplii.com/ebm-resources/public/client/web/index.html#/signon"},
+    {"action": "dismiss", "intent": "accept the cookie banner if shown", "locator": {"role": "button", "name": "Accept"}},
+    {"action": "fill", "intent": "enter the card number", "locator": {"label": "Card number"}, "secret": "simplii/username"},
+    {"action": "fill", "intent": "enter the password", "locator": {"label": "Password"}, "secret": "simplii/password"},
+    {"action": "click", "intent": "submit the sign-on form", "locator": {"role": "button", "name": "Sign on"}},
+    {
+      "action": "mfa",
+      "intent": "answer a one-time verification code if asked",
+      "detect": {"role": "heading", "name": "Verify it's you"},
+      "input": {"label": "Verification code"},
+      "submit": {"role": "button", "name": "Verify"}
+    },
+    {"action": "expect", "intent": "land on the accounts overview", "url": "#/accounts", "locator": {"role": "heading", "name": "My Accounts"}}
+  ],
+  "steps": [
+    {"action": "dismiss", "intent": "close any promo pop-up", "locator": {"role": "button", "name": "Close"}},
+    {"action": "click", "intent": "open the chequing account", "locator": {"role": "link", "name": "No Fee Chequing Account"}},
+    {"action": "click", "intent": "open the download transactions page", "locator": {"role": "button", "name": "Download transactions"}},
+    {"action": "click", "intent": "choose the last 30 days", "locator": {"role": "radio", "name": "Last 30 days"}},
+    {"action": "download", "intent": "download the chequing CSV", "locator": {"role": "button", "name": "Download"}, "save_as": "chequing__{today}.{ext}"}
+  ]
+}

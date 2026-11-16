@@ -1,0 +1,11 @@
+{
+  "_comment": "Personal details the repair command refuses to send. Copy to /srv/ingest-secrets/sensitive.json (mode 600). Usernames and custom fields from the vault are added automatically; recent amounts come from normalized/.",
+  "values": [
+    "Your Full Name",
+    "123 Your Street",
+    "Your City",
+    "A1A 1A1",
+    "555-555-0100",
+    "you@example.com"
+  ]
+}
