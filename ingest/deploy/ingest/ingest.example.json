@@ -29,8 +29,8 @@
   },
   "sure": {"url": "http://web:3000", "api_key_file": "/run/secrets/sure_api_key"},
   "repair": {
-    "url": "http://127.0.0.1:11434",
-    "model": "qwen2.5:3b",
+    "url": "http://REPAIR_HOST_TAILNET_IP:11434",
+    "model": "qwen2.5:7b-instruct-q4_K_M",
     "sensitive_file": "/srv/ingest-secrets/sensitive.json"
   },
   "accounts": {

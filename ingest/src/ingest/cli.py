@@ -162,7 +162,10 @@ def cmd_repair(args, cfg) -> int:
 
     p = paths(cfg)
     r = cfg.get("repair", {})
-    endpoint = ModelEndpoint(url=args.endpoint or r.get("url", ModelEndpoint.url), model=args.model or r.get("model", ModelEndpoint.model))
+    endpoint = ModelEndpoint(url=args.endpoint or r.get("url", ""), model=args.model or r.get("model", ModelEndpoint.model))
+    if not endpoint.url:
+        print("Set repair.url in the config (or pass --endpoint): the Ollama host to ask.")
+        return 2
     queue_dir = p["queue"]
     if args.queue:
         bundles = sorted(d for d in queue_dir.iterdir() if d.is_dir()) if queue_dir.exists() else []

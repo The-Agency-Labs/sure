@@ -35,7 +35,7 @@ ingest/
  │  tailnet IP only (never the LAN); backups to sure-backups every 6 h    │
  └────────────────────────────────────────────────────────────────────────┘
    /srv/finance = host ZFS dataset via virtiofs    Bitwarden-compatible vault (bank logins)
-   push (optional, generic text) ◄── failures      Ollama on this VM, 127.0.0.1 (repair only)
+   push (optional, generic text) ◄── failures      Ollama on a GPU machine, tailnet only (repair only)
 ```
 
 | Path on the VM | What | Owner |
@@ -44,7 +44,6 @@ ingest/
 | `/opt/ingest/` | sparse checkout of this repo (`ingest/` only) | root |
 | `/etc/ingest/ingest.json`, `banks.list` | config | root:finance 640 |
 | `/srv/ingest-secrets/` | browser profiles, `bw/` credentials, `sensitive.json`, push token | ingest-scraper 700 |
-| `/srv/ollama` | repair model weights | root 700 |
 | `/srv/loader-secrets/sure_api_key` | Sure API key | ingest-loader 400 |
 | `/srv/ingest-state/bundles` | failure bundles | ingest-scraper 700 |
 | `/srv/ingest-state/review` | files that failed a check | ingest-loader |
@@ -191,7 +190,7 @@ Run all VM steps in a root shell.
    `/etc/ingest/banks.list`.
 6. **Build:** `cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=<x> --build-arg BW_SHA256=<sha>`
    (take both from the Bitwarden CLI release page).
-7. **Repair model:** `docker compose --profile repair up -d ollama && docker compose exec ollama ollama pull qwen2.5:3b`
+7. **Repair model** on a machine with a GPU: see "Where the model runs" below.
 8. **First sign-in by hand** for each bank, so you can type the code and tick
    "remember this device": `docker compose run --rm scraper scrape simplii --interactive`,
    then `docker compose run --rm loader load`.
@@ -259,8 +258,7 @@ A failed step leaves `/srv/ingest-state/bundles/<bank>-<time>/bundle.json` (plus
 
 1. The blocking check runs. If anything sensitive is found, nothing is shown or sent.
 2. The **exact** prompt is printed. Type `yes` to send it to the configured
-   endpoint (`repair.url`, default the Ollama container on this VM at
-   `127.0.0.1:11434`). `--endpoint`/`--model` override it.
+   endpoint (`repair.url` in the config; `--endpoint`/`--model` override it).
 3. The reply is validated, then shown as a diff. Type `yes` to write
    `banks/<bank>.json` and commit it.
 4. Push the commit and re-run the bank by hand.
@@ -268,15 +266,27 @@ A failed step leaves `/srv/ingest-state/bundles/<bank>-<time>/bundle.json` (plus
 If the endpoint is offline, the bundle (without the screenshot) is queued and you
 get a push. Run `/opt/ingest-venv/bin/ingest repair --queue` later.
 
-**Where the model runs.** By default, on the finance VM, CPU-only:
-`qwen2.5:3b` (about 2 GB) in an Ollama container listening on 127.0.0.1 only. Nothing
-leaves the VM and no firewall rules are needed. With 3 vCPUs, expect an answer in
-roughly a minute or two (an estimate, not measured). That's fine for a rare,
-human-attended fix. The job is narrow (match an intent like "download transactions"
-to one of the listed elements, in a fixed schema), and every answer is validated and
-reviewed. If the 3B model's suggestions turn out poor, point `--endpoint` at the
-desktop with a GPU (6 GB VRAM runs `qwen2.5:7b-instruct-q4_K_M`). That needs Ollama
-there with the firewall rules below.
+**Where the model runs.** On a machine with a GPU, reached over the tailnet;
+`qwen2.5:7b-instruct-q4_K_M` fits in 6 GB of VRAM and answers in seconds. If that
+machine is off, the repair is queued and you get a push.
+
+A 3B model on the VM's CPU was tried and dropped. On the simplest case (a renamed
+download button, the new name visible in the snapshot) it took 106 s and proposed
+an invalid step, which validation rejected.
+
+Set it up on the GPU machine as root:
+
+```sh
+deploy/repair-host/install-ollama.sh <version> <sha256> <this machine's tailnet IP> <the VM's tailnet IP>
+sudo -u ollama env OLLAMA_HOST=<tailnet IP>:11434 ollama pull qwen2.5:7b-instruct-q4_K_M
+```
+
+It installs Ollama's official build (it bundles CUDA 12, which older cards such as
+Pascal need), runs it as a dedicated user under a hardened systemd unit that waits
+for Tailscale, listens on the tailnet IP only, unloads the model after every answer,
+and adds ufw rules so only the VM reaches port 11434. Also restrict it in your
+Tailscale ACL (finance VM → GPU machine:11434 only) so the rule doesn't depend on
+one firewall. Then set `repair.url` in `/etc/ingest/ingest.json` on the VM.
 
 ## Tests
 
@@ -325,25 +335,12 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | Sure on the tailnet | `curl -sI http://<tailnet IP>:3000` from a tailnet device | `HTTP/1.1 200` or a redirect |
 | Sure comes back after reboot | `reboot`, then `docker compose -f /opt/sure/compose.yml ps` | `web` running |
 | scraper can't reach Sure | `docker compose run --rm --entrypoint python scraper -c "import socket; socket.create_connection(('web',3000),3)"` | fails (name not resolved) |
-| Ollama up on the VM | `curl -s http://127.0.0.1:11434/api/tags` | JSON list with `qwen2.5:3b` |
-| Ollama not reachable from the LAN | `curl -m 3 http://<VM_IP>:11434/api/tags` from another machine | timeout/refused |
-| Ollama structured output | `curl -s http://127.0.0.1:11434/api/chat -d '{"model":"<m>","stream":false,"keep_alive":0,"format":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]},"messages":[{"role":"user","content":"say ok"}]}'` | `{"ok":true}` in `message.content` |
+| Ollama reachable from the VM | `curl -s http://<GPU machine tailnet IP>:11434/api/tags` on the VM | JSON list with the model |
+| Ollama not reachable from elsewhere | the same from any other device | timeout/refused |
+| Ollama uses the GPU | `journalctl -u ollama \| grep "inference compute"` on the GPU machine | `library=CUDA`, not `cpu` |
+| Ollama structured output | `curl -s http://<GPU machine tailnet IP>:11434/api/chat -d '{"model":"<m>","stream":false,"keep_alive":0,"format":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]},"messages":[{"role":"user","content":"say ok"}]}'` | `{"ok":true}` in `message.content` |
 | timer | `systemctl list-timers ingest-nightly.timer` | next run ~03:30 |
 | backups | `ls /srv/finance/sure-backups/*/` after 6 h | `*-scheduled` folders |
-
-Only if you use another machine as the repair endpoint: firewall it so only the finance VM reaches 11434.
-
-- Linux:
-  ```sh
-  ufw allow from <VM_IP> to any port 11434 proto tcp
-  ufw deny 11434/tcp
-  ```
-  Set `OLLAMA_HOST=0.0.0.0` in the Ollama service.
-- Windows (admin PowerShell):
-  ```powershell
-  New-NetFirewallRule -DisplayName "Ollama from finance VM" -Direction Inbound -Protocol TCP -LocalPort 11434 -RemoteAddress <VM_IP> -Action Allow
-  ```
-  Also set `OLLAMA_HOST=0.0.0.0`, and make sure no broader allow rule covers 11434.
 
 ## Still unverified
 

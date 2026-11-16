@@ -61,9 +61,6 @@ echo "== AppArmor profile for the scraper (Chrome sandbox needs user namespaces)
 install -m 0644 "$REPO/ingest/deploy/ingest/apparmor-ingest-scraper" /etc/apparmor.d/ingest-scraper
 apparmor_parser -r -W /etc/apparmor.d/ingest-scraper
 
-echo "== repair model storage (Ollama on this VM)"
-install -d -o root -g root -m 0700 /srv/ollama
-
 echo "== Docker networks"
 docker network inspect sure_net    >/dev/null 2>&1 || docker network create sure_net
 docker network inspect scraper_net >/dev/null 2>&1 || docker network create scraper_net
@@ -88,7 +85,7 @@ Done. Still to do by hand (see ingest/README.md, "Setup"):
   3. Fill /srv/ingest-secrets/bw/* (dedicated bank-logins vault account)
   4. Edit /etc/ingest/ingest.json and /etc/ingest/banks.list
   5. cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=... --build-arg BW_SHA256=...
-  6. Repair model: docker compose --profile repair up -d ollama && docker compose exec ollama ollama pull qwen2.5:3b
+  6. Repair model on a GPU machine: deploy/repair-host/install-ollama.sh (see README)
   7. First sign-in per bank by hand: docker compose run --rm scraper scrape <bank> --interactive
   8. systemctl enable --now ingest-nightly.timer
 NEXT

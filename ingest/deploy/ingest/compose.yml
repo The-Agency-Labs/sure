@@ -65,30 +65,7 @@ services:
       - /srv/ingest-state/review:/srv/ingest-state/review
     networks: [sure_net]
 
-  ollama:
-    # Repair model, CPU-only, on the VM itself. Reachable from the VM's own
-    # shell (127.0.0.1) and nothing else. Unloads the model after each answer
-    # (keep_alive 0), so idle it holds almost no memory.
-    #   docker compose --profile repair up -d ollama
-    #   docker compose exec ollama ollama pull qwen2.5:3b
-    profiles: [repair]
-    image: ollama/ollama:0.12.0
-    restart: unless-stopped
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    cpus: 3
-    mem_limit: 4g
-    environment:
-      OLLAMA_NUM_PARALLEL: "1"
-      OLLAMA_MAX_LOADED_MODELS: "1"
-    ports:
-      - "127.0.0.1:11434:11434"
-    volumes:
-      - /srv/ollama:/root/.ollama
-    networks: [repair_net]
-
 networks:
-  repair_net: {}
   scraper_net:
     external: true
   sure_net:
