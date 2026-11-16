@@ -15,7 +15,7 @@ ENTRYPOINT ["python", "-m", "ingest"]
 FROM base AS scraper
 # Real Google Chrome (not the bundled Chromium) in headed mode under Xvfb.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends xvfb xauth unzip ca-certificates curl \
+ && apt-get install -y --no-install-recommends libatomic1 xvfb xauth unzip ca-certificates curl \
  && playwright install --with-deps chrome \
  && rm -rf /var/lib/apt/lists/*
 # Bitwarden CLI, native build. Pin the version and its SHA-256 from

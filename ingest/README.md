@@ -195,7 +195,7 @@ Run all VM steps in a root shell.
 8. **First sign-in by hand** for each bank, so you can type the code and tick
    "remember this device": `docker compose run --rm scraper scrape simplii --interactive`,
    then `docker compose run --rm loader load`.
-9. `systemctl start ingest-nightly.timer`
+9. `systemctl enable --now ingest-nightly.timer`
 10. **Repair tooling (VM, outside the containers).** It needs git and the vault:
    ```sh
    apt install python3-venv

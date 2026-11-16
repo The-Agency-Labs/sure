@@ -14,8 +14,10 @@ REPO=/opt/ingest
 
 echo "== users and group"
 getent group finance >/dev/null || groupadd --system --gid "$FINANCE_GID" finance
-id ingest-scraper >/dev/null 2>&1 || useradd --system --uid "$SCRAPER_UID" --gid finance --no-create-home --shell /usr/sbin/nologin ingest-scraper
-id ingest-loader  >/dev/null 2>&1 || useradd --system --uid "$LOADER_UID"  --gid finance --no-create-home --shell /usr/sbin/nologin ingest-loader
+# Fixed UIDs above the system range so they match on the host (virtiofs); no
+# login shell, no home, no password.
+id ingest-scraper >/dev/null 2>&1 || useradd --uid "$SCRAPER_UID" --gid finance --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin ingest-scraper
+id ingest-loader  >/dev/null 2>&1 || useradd --uid "$LOADER_UID"  --gid finance --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin ingest-loader
 
 echo "== virtiofs share at /srv/finance"
 mkdir -p /srv/finance
@@ -73,11 +75,10 @@ TS_IP=$(tailscale ip -4 2>/dev/null || true)
 [ -n "$TS_IP" ] && echo "   this VM's tailnet IP: $TS_IP  (use it for SURE_BIND_ADDR in /opt/sure/.env)" \
   || echo "   tailscale has no IPv4 address yet: bring it up, then set SURE_BIND_ADDR" >&2
 
-echo "== systemd timer"
+echo "== systemd timer (installed, not enabled until setup is finished)"
 install -m 0644 "$REPO/ingest/deploy/systemd/ingest-nightly.service" /etc/systemd/system/
 install -m 0644 "$REPO/ingest/deploy/systemd/ingest-nightly.timer" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable ingest-nightly.timer
 
 cat <<'NEXT'
 
@@ -89,5 +90,5 @@ Done. Still to do by hand (see ingest/README.md, "Setup"):
   5. cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=... --build-arg BW_SHA256=...
   6. Repair model: docker compose --profile repair up -d ollama && docker compose exec ollama ollama pull qwen2.5:3b
   7. First sign-in per bank by hand: docker compose run --rm scraper scrape <bank> --interactive
-  8. systemctl start ingest-nightly.timer
+  8. systemctl enable --now ingest-nightly.timer
 NEXT
