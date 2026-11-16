@@ -26,6 +26,27 @@ class NullNotifier:
         self.sent.append((message, click_url))
 
 
+class WebhookNotifier:
+    """POST {"title", "message", "url"} as JSON with a bearer token. For a
+    self-hosted push service that delivers straight to the phone (for example
+    an Archimedes endpoint that bypasses its agents)."""
+
+    def __init__(self, url: str, token: str | None = None):
+        self.url, self.token = url, token
+
+    def notify(self, message: str, click_url: str | None = None) -> None:
+        import json
+
+        body = json.dumps({"title": "Finance sync", "message": message, "url": click_url}).encode()
+        req = urllib.request.Request(self.url, data=body, method="POST", headers={"Content-Type": "application/json"})
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            urllib.request.urlopen(req, timeout=10).close()
+        except OSError:
+            pass
+
+
 class NtfyNotifier:
     def __init__(self, url: str, topic: str, token: str | None = None):
         self.endpoint = f"{url.rstrip('/')}/{topic}"
@@ -46,6 +67,33 @@ class NtfyNotifier:
 
 class MfaTimeout(RuntimeError):
     pass
+
+
+class MfaNeeded(RuntimeError):
+    """The bank asked for a code during an unattended run. Nobody is there to
+    answer at night, so stop at once; the human signs in once by hand
+    (``ingest scrape <bank> --interactive``) and the profile remembers the device."""
+
+
+class NoWaitCodes:
+    def __init__(self, notifier: "Notifier", institution: str):
+        self.notifier, self.institution = notifier, institution
+
+    def wait_for_code(self, timeout_s: float) -> str:
+        self.notifier.notify(f"Finance sync: {self.institution} wants a verification code. Run it by hand when you can.")
+        raise MfaNeeded("verification code requested during an unattended run")
+
+
+class TerminalCodes:
+    """For a run started by hand: ask in the terminal."""
+
+    def wait_for_code(self, timeout_s: float) -> str:
+        import getpass
+
+        code = getpass.getpass("Verification code from the bank: ").strip()
+        if not code:
+            raise MfaTimeout("no code entered")
+        return code
 
 
 class CodeProvider(Protocol):

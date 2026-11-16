@@ -41,7 +41,12 @@ class RunConfig:
     bundle_root: Path
     headless: bool = False
     channel: str | None = "chrome"
-    chromium_sandbox: bool = False
+    # Chrome's own process sandbox (renderer isolation). A security control, not
+    # a stealth one: with it off, a hostile page that exploits the renderer can
+    # read everything this UID can, including the vault credentials.
+    chromium_sandbox: bool = True
+    locale: str = "en-CA"
+    timezone_id: str = "America/Toronto"
     step_timeout_ms: int = 20_000
     dismiss_wait_ms: int = 4_000
     mfa_detect_ms: int = 8_000
@@ -221,9 +226,14 @@ class Runner:
                 channel=cfg.channel,
                 headless=cfg.headless,
                 chromium_sandbox=cfg.chromium_sandbox,
+                # Look like the person's own Chrome, not a test harness: Playwright's
+                # --enable-automation sets navigator.webdriver and shows a banner.
+                ignore_default_args=["--enable-automation"],
+                args=["--disable-blink-features=AutomationControlled"],
+                no_viewport=not cfg.headless,  # real window size under Xvfb, not an emulated viewport
                 accept_downloads=True,
-                locale="en-CA",
-                timezone_id="America/Toronto",
+                locale=cfg.locale,
+                timezone_id=cfg.timezone_id,
             )
             page = None
             try:

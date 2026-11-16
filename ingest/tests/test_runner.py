@@ -3,7 +3,7 @@ import stat
 
 import pytest
 
-from ingest.notify import MfaTimeout, NullNotifier
+from ingest.notify import MfaTimeout, NoWaitCodes, NullNotifier
 from ingest.runner import RunConfig, Runner
 from ingest.secrets import DictStore
 from ingest.steps import Script
@@ -170,3 +170,36 @@ def test_unlisted_post_from_page_script_never_reaches_the_server(tmp_path):
     assert result.ok  # a blocked XHR alone doesn't stop the run; it just never happens
     assert bank.hits["POST /api/v2/quick"] == 0
     assert ("/api/:id/quick", "POST not allowlisted") in result.aborted_requests  # logged as a scrubbed pattern
+
+
+def test_remembered_device_survives_between_runs(tmp_path):
+    # Same profile dir, two runs: the bank's "trusted device" cookie persists,
+    # so the second night signs in without a code. This is what keeps MFA rare.
+    with fakebank.FakeBank() as bank:
+        first_codes, second_codes = Codes(), Codes()
+        runner, _ = make_runner(tmp_path, fakebank.script_dict(bank.url), codes=first_codes)
+        assert runner.run().ok
+        runner, _ = make_runner(tmp_path, fakebank.script_dict(bank.url), codes=second_codes)
+        assert runner.run().ok
+    assert (first_codes.asked, second_codes.asked) == (1, 0)
+    assert bank.hits["GET /mfa"] == 1
+
+
+def test_browser_does_not_announce_automation(tmp_path):
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, fakebank.script_dict(bank.url))
+        assert runner.config.chromium_sandbox is True  # sandbox is on by default
+        assert runner.run().ok
+    [beacon] = bank.beacons
+    assert beacon["webdriver"] == "false"
+
+
+def test_unattended_run_stops_at_once_when_a_code_is_asked(tmp_path):
+    with fakebank.FakeBank() as bank:
+        notifier = NullNotifier()
+        cfg_runner, _ = make_runner(tmp_path, fakebank.script_dict(bank.url))
+        runner = type(cfg_runner)(cfg_runner.script, cfg_runner.config, cfg_runner.secrets, NoWaitCodes(notifier, "fakebank"), notifier)
+        result = runner.run()
+    assert not result.ok and "MfaNeeded" in result.error
+    assert notifier.sent[0][0] == "Finance sync: fakebank wants a verification code. Run it by hand when you can."
+    assert bank.hits["POST /mfa"] == 0

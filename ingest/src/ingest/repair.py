@@ -231,8 +231,8 @@ class ModelOffline(RuntimeError):
 
 @dataclass
 class ModelEndpoint:
-    url: str = "http://mainpc.lan:11434"
-    model: str = "qwen2.5:7b-instruct-q4_K_M"
+    url: str = "http://127.0.0.1:11434"  # Ollama on the finance VM itself
+    model: str = "qwen2.5:3b"
     timeout: float = 600
 
     def ask(self, prompt: str) -> dict:

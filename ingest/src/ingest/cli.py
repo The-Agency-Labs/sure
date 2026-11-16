@@ -46,16 +46,21 @@ def read_secret_file(path: str | None) -> str | None:
 
 
 def notifier(cfg: dict):
-    from .notify import NtfyNotifier, NullNotifier
+    """Push target, from "notify": {"type": "webhook" | "ntfy" | "none", ...}."""
+    from .notify import NtfyNotifier, NullNotifier, WebhookNotifier
 
-    n = cfg.get("ntfy")
-    if not n:
-        return NullNotifier()
-    return NtfyNotifier(n["url"], n["topic"], read_secret_file(n.get("token_file")))
+    n = cfg.get("notify") or {}
+    kind = n.get("type", "none")
+    if kind == "webhook":
+        return WebhookNotifier(n["url"], read_secret_file(n.get("token_file")))
+    if kind == "ntfy":
+        return NtfyNotifier(n["url"], n["topic"], read_secret_file(n.get("token_file")))
+    log.warning("no push target configured: failures are only in the logs")
+    return NullNotifier()
 
 
 def cmd_scrape(args, cfg) -> int:
-    from .notify import MfaServer
+    from .notify import MfaServer, NoWaitCodes, TerminalCodes
     from .runner import RunConfig, Runner
     from .secrets import BitwardenStore
     from .steps import Script
@@ -73,11 +78,20 @@ def cmd_scrape(args, cfg) -> int:
         bundle_root=p["bundles"],
         headless=browser.get("headless", False),
         channel=browser.get("channel", "chrome"),
-        chromium_sandbox=browser.get("chromium_sandbox", False),
+        chromium_sandbox=browser.get("chromium_sandbox", True),
+        locale=browser.get("locale", "en-CA"),
+        timezone_id=browser.get("timezone", "America/Toronto"),
         mfa_timeout_s=mfa.get("timeout_s", 300),
     )
     note = notifier(cfg)
-    codes = MfaServer(mfa.get("bind", "0.0.0.0"), mfa.get("port", 8765), mfa["public_base"], note)
+    # By hand: type the code in the terminal. Unattended: "stop" (default) ends the
+    # run with a push; "form" waits on a one-time page on the LAN/tailnet.
+    if args.interactive:
+        codes = TerminalCodes()
+    elif mfa.get("unattended", "stop") == "form":
+        codes = MfaServer(mfa.get("bind", "0.0.0.0"), mfa.get("port", 8765), mfa["public_base"], note)
+    else:
+        codes = NoWaitCodes(note, script.institution)
     store = BitwardenStore(p["secrets"] / "bw")
     try:
         result = Runner(script, run_cfg, store, codes, note).run()
@@ -195,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("scrape", help="run one bank script")
     s.add_argument("bank")
+    s.add_argument("--interactive", action="store_true", help="started by hand: ask for any verification code in the terminal")
     s.set_defaults(fn=cmd_scrape)
 
     s = sub.add_parser("load", help="parse new raw files and load them into Sure")

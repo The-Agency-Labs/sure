@@ -55,6 +55,13 @@ install -d -o root -g root -m 0700 /opt/sure
 [ -e /opt/sure/compose.yml ] || install -m 0600 "$REPO/ingest/deploy/sure/compose.yml" /opt/sure/compose.yml
 [ -e /opt/sure/.env ] || install -m 0600 "$REPO/ingest/deploy/sure/.env.example" /opt/sure/.env
 
+echo "== AppArmor profile for the scraper (Chrome sandbox needs user namespaces)"
+install -m 0644 "$REPO/ingest/deploy/ingest/apparmor-ingest-scraper" /etc/apparmor.d/ingest-scraper
+apparmor_parser -r -W /etc/apparmor.d/ingest-scraper
+
+echo "== repair model storage (Ollama on this VM)"
+install -d -o root -g root -m 0700 /srv/ollama
+
 echo "== Docker networks"
 docker network inspect sure_net    >/dev/null 2>&1 || docker network create sure_net
 docker network inspect scraper_net >/dev/null 2>&1 || docker network create scraper_net
@@ -71,7 +78,9 @@ Done. Still to do by hand (see ingest/README.md, "Setup"):
   1. Fill /opt/sure/.env, then: cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup
   2. Create a Sure API key (read_write); write it to /srv/loader-secrets/sure_api_key
   3. Fill /srv/ingest-secrets/bw/* (dedicated bank-logins vault account)
-  4. Edit /etc/ingest/ingest.json and /etc/ingest/banks.list; set MFA_BIND in /opt/ingest/ingest/deploy/ingest/.env
+  4. Edit /etc/ingest/ingest.json and /etc/ingest/banks.list
   5. cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=... --build-arg BW_SHA256=...
-  6. systemctl start ingest-nightly.timer
+  6. Repair model: docker compose --profile repair up -d ollama && docker compose exec ollama ollama pull qwen2.5:3b
+  7. First sign-in per bank by hand: docker compose run --rm scraper scrape <bank> --interactive
+  8. systemctl start ingest-nightly.timer
 NEXT

@@ -47,6 +47,7 @@ ACCOUNTS = """<h1>Accounts</h1>
   <button onclick="fetch('/api/v2/quick', {{method: 'POST', body: 'amount=500'}}).catch(() => {{}})">Quick action</button>
   <button id=dl onclick="location.href='/export/transactions.csv?acct=77812'">{download_label}</button>
 </section>
+<script>fetch('/beacon?webdriver=' + navigator.webdriver + '&ua=' + encodeURIComponent(navigator.userAgent))</script>
 <div role=dialog aria-label="Special offer" id=promo>
   <h2>Special offer for {holder}</h2>
   <button onclick="document.getElementById('promo').remove()">No thanks</button>
@@ -58,6 +59,7 @@ class FakeBank:
         self.download_label = download_label
         self.require_mfa = require_mfa
         self.hits: Counter[str] = Counter()
+        self.beacons: list[dict[str, str]] = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -88,10 +90,15 @@ class FakeBank:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def _redirect(self, to):
+            def _redirect(self, to, cookie=None):
                 self.send_response(303)
                 self.send_header("Location", to)
+                if cookie:
+                    self.send_header("Set-Cookie", cookie)
                 self.end_headers()
+
+            def _trusted(self):
+                return "trusted_device=1" in (self.headers.get("Cookie") or "")
 
             def _form(self):
                 n = int(self.headers.get("Content-Length") or 0)
@@ -117,6 +124,9 @@ class FakeBank:
                     self.send_header("Content-Length", str(len(data)))
                     self.end_headers()
                     self.wfile.write(data)
+                elif path == "/beacon":
+                    bank.beacons.append({k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()})
+                    self._page("ok", "")
                 elif path == "/transfer":
                     self._page("Send money", "<h1>Send money</h1>")
                 else:
@@ -128,11 +138,15 @@ class FakeBank:
                 form = self._form()
                 if path == "/login":
                     if form.get("user") == USERNAME and form.get("password") == PASSWORD:
-                        self._redirect("/mfa" if bank.require_mfa else "/accounts")
+                        # A remembered device skips the code, as banks do.
+                        self._redirect("/mfa" if bank.require_mfa and not self._trusted() else "/accounts")
                     else:
                         self._page("Sign on", "<h1>Sign on</h1><p role=alert>Incorrect details</p>" + LOGIN)
                 elif path == "/mfa":
-                    self._redirect("/accounts" if form.get("code") == MFA_CODE else "/mfa")
+                    if form.get("code") == MFA_CODE:
+                        self._redirect("/accounts", "trusted_device=1; Path=/; Max-Age=31536000; HttpOnly")
+                    else:
+                        self._redirect("/mfa")
                 else:
                     self._page("Not found", "<h1>Not found</h1>", 404)
 
