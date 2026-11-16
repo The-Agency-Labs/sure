@@ -203,3 +203,22 @@ def test_unattended_run_stops_at_once_when_a_code_is_asked(tmp_path):
     assert not result.ok and "MfaNeeded" in result.error
     assert notifier.sent[0][0] == "Finance sync: fakebank wants a verification code. Run it by hand when you can."
     assert bank.hits["POST /mfa"] == 0
+
+
+def test_balance_step_saves_the_shown_balance(tmp_path):
+    import json as _json
+
+    with fakebank.FakeBank() as bank:
+        data = fakebank.script_dict(bank.url)
+        data["steps"] = [
+            data["steps"][0],
+            {"action": "balance", "intent": "read the plan balance", "locator": {"testid": "plan-balance"}, "save_as": "pension__{today}.{ext}"},
+        ]
+        runner, _ = make_runner(tmp_path, data)
+        result = runner.run()
+    assert result.ok, result.error
+    [saved] = result.downloads
+    assert saved.name.startswith("pension__") and saved.suffix == ".json"
+    body = _json.loads(saved.read_text())
+    assert body["kind"] == "balance" and body["text"] == "Total balance $1,234.56"
+    assert not saved.stat().st_mode & 0o222

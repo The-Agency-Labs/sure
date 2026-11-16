@@ -49,7 +49,7 @@ done
 echo "== config"
 install -d -o root -g finance -m 0750 /etc/ingest
 [ -e /etc/ingest/ingest.json ] || install -o root -g finance -m 0640 "$REPO/ingest/deploy/ingest/ingest.example.json" /etc/ingest/ingest.json
-[ -e /etc/ingest/banks.list ]  || printf '# one bank per line, scraped in this order\n# simplii\n' > /etc/ingest/banks.list
+[ -e /etc/ingest/banks.list ]  || printf '# one bank per line, scraped in this order; see `ingest due --help`\n# simplii\n# sunlife every=14d anchor=<a payday, YYYY-MM-DD> offset=2d\n' > /etc/ingest/banks.list
 [ -e "$REPO/ingest/deploy/ingest/.env" ] || install -m 0600 "$REPO/ingest/deploy/ingest/.env.example" "$REPO/ingest/deploy/ingest/.env"
 
 echo "== Sure"
@@ -71,6 +71,8 @@ install -m 0644 "$REPO/ingest/deploy/systemd/docker.service.d/10-after-tailscale
 TS_IP=$(tailscale ip -4 2>/dev/null || true)
 [ -n "$TS_IP" ] && echo "   this VM's tailnet IP: $TS_IP  (use it for SURE_BIND_ADDR in /opt/sure/.env)" \
   || echo "   tailscale has no IPv4 address yet: bring it up, then set SURE_BIND_ADDR" >&2
+
+install -d -m 0700 /var/lib/ingest /var/lib/ingest/last-success
 
 echo "== systemd timer (installed, not enabled until setup is finished)"
 install -m 0644 "$REPO/ingest/deploy/systemd/ingest-nightly.service" /etc/systemd/system/

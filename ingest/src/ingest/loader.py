@@ -29,6 +29,7 @@ PARSERS = {
     "simplii": "ingest.parsers.simplii",
     "mapped_csv": "ingest.parsers.mapped_csv",
     "sunlife_pdf": "ingest.parsers.sunlife",
+    "captured_balance": "ingest.parsers.captured_balance",
 }
 
 
@@ -76,7 +77,13 @@ class Loader:
         fmt = dict(self.config.get("formats", {}).get(institution) or {})
         if not fmt:
             raise ParseError(f"no format configured for {institution}")
-        module = importlib.import_module(PARSERS[fmt.pop("parser")])
+        parser = fmt.pop("parser")
+        if isinstance(parser, dict):  # one institution, several file kinds: {"json": ..., "pdf": ...}
+            ext = path.suffix.lstrip(".").lower()
+            if ext not in parser:
+                raise ParseError(f"no parser configured for .{ext} files from {institution}")
+            parser = parser[ext]
+        module = importlib.import_module(PARSERS[parser])
         return module.parse(path, institution=institution, **fmt)
 
     @staticmethod

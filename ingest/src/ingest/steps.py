@@ -16,6 +16,9 @@ Step actions:
                                         anything else stops the run
   mfa       {detect, input, submit}     if ``detect`` appears, ask the human
   download  {locator, save_as}          click and save the download
+  balance   {locator, save_as}          save the text of a balance shown on the
+                                        page (for portals with no export); the
+                                        loader turns it into a balance update
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-ACTIONS = {"goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download"}
+ACTIONS = {"goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance"}
 LOCATOR_KINDS = ("role", "label", "text", "placeholder", "testid", "css")
 
 
@@ -134,6 +137,7 @@ class Step:
             "expect": [],
             "mfa": ["detect", "input", "submit"],
             "download": ["locator", "save_as"],
+            "balance": ["locator", "save_as"],
         }[self.action]
         for key in need:
             if getattr(self, key) is None:
@@ -261,6 +265,8 @@ class Script:
             raise ScriptError("goto is only allowed in the login phase; navigate by clicking")
         if any(s.action == "fill" for s in steps):
             raise ScriptError("fill is only allowed in the login phase")
+        if any(s.action in ("download", "balance") for s in login):
+            raise ScriptError("download and balance steps belong after login")
         script = cls(
             institution=data["institution"],
             allowlist=Allowlist.parse(data.get("allowlist", {})),

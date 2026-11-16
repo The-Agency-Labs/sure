@@ -196,6 +196,19 @@ def cmd_repair(args, cfg) -> int:
     return status
 
 
+def cmd_due(args, cfg) -> int:
+    from .schedule import ScheduleError, due_banks
+
+    today = dt.date.fromisoformat(args.today) if args.today else dt.date.today()
+    try:
+        banks = due_banks(Path(args.list).read_text(), Path(args.state), today)
+    except ScheduleError as exc:
+        print(f"banks list: {exc}", file=sys.stderr)
+        return 2
+    print("\n".join(banks))
+    return 0
+
+
 def cmd_check(args, cfg) -> int:
     from .steps import Script
 
@@ -227,6 +240,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--endpoint", help="override the Ollama-compatible endpoint URL")
     s.add_argument("--model")
     s.set_defaults(fn=cmd_repair)
+
+    s = sub.add_parser("due", help="print the banks due tonight, from banks.list and the last successful runs")
+    s.add_argument("--list", default="/etc/ingest/banks.list")
+    s.add_argument("--state", default="/var/lib/ingest/last-success")
+    s.add_argument("--today", help="YYYY-MM-DD, for checking a schedule")
+    s.set_defaults(fn=cmd_due, no_config=True)
 
     s = sub.add_parser("check", help="validate a bank script")
     s.add_argument("script")

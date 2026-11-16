@@ -40,7 +40,7 @@
   },
   "formats": {
     "simplii": {"parser": "simplii"},
-    "sunlife": {"parser": "sunlife_pdf"},
+    "sunlife": {"parser": {"json": "captured_balance", "pdf": "sunlife_pdf"}},
     "amex": {
       "parser": "mapped_csv",
       "_unverified": "Amex Canada CSV: column names are a guess (one Amount column, charges positive). Fix from a real export.",

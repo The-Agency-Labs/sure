@@ -1,0 +1,30 @@
+{
+  "placeholder": true,
+  "institution": "sunlife",
+  "currency": "CAD",
+  "allowlist": {
+    "navigation": ["^https://www\\.sunlife\\.ca/", "^https://mysunlife\\.ca/", "^https://my\\.sunlife\\.ca/"],
+    "hosts": ["sunlife.ca", "mysunlife.ca"],
+    "post": ["^https://www\\.sunlife\\.ca/.*/(signin|login)"]
+  },
+  "login": [
+    {"action": "goto", "intent": "open the sign-in page", "url": "https://www.sunlife.ca/en/sign-in/"},
+    {"action": "dismiss", "intent": "accept the cookie banner if shown", "locator": {"role": "button", "name": "Accept"}},
+    {"action": "fill", "intent": "enter the access ID", "locator": {"label": "Access ID"}, "secret": "sunlife/username"},
+    {"action": "fill", "intent": "enter the password", "locator": {"label": "Password"}, "secret": "sunlife/password"},
+    {"action": "click", "intent": "submit the sign-in form", "locator": {"role": "button", "name": "Sign in"}},
+    {
+      "action": "mfa",
+      "intent": "answer a one-time verification code if asked",
+      "detect": {"role": "heading", "name": "Verify your identity"},
+      "input": {"label": "Verification code"},
+      "submit": {"role": "button", "name": "Continue"}
+    },
+    {"action": "expect", "intent": "land on the account overview", "locator": {"role": "heading", "name": "My accounts"}}
+  ],
+  "steps": [
+    {"action": "dismiss", "intent": "close any promo pop-up", "locator": {"role": "button", "name": "Close"}},
+    {"action": "click", "intent": "open the pension plan", "locator": {"role": "link", "name": "Defined Contribution Pension Plan"}},
+    {"action": "balance", "intent": "read the plan's total balance", "locator": {"testid": "total-balance"}, "save_as": "pension__{today}.{ext}"}
+  ]
+}

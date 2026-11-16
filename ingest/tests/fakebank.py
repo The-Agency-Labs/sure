@@ -42,6 +42,7 @@ ACCOUNTS = """<h1>Accounts</h1>
 <section aria-label="Chequing">
   <h2>Chequing account 4500 1234 5678 9012</h2>
   <p>Balance ${balance}</p>
+  <p data-testid="plan-balance">Total balance ${balance}</p>
   <a href="/accounts/77812/history">Account history</a>
   <a href="/transfer?from=77812">Transfer funds</a>
   <button onclick="fetch('/api/v2/quick', {{method: 'POST', body: 'amount=500'}}).catch(() => {{}})">Quick action</button>

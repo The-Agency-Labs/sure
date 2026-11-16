@@ -205,9 +205,30 @@ Run all VM steps in a root shell.
    ```
    Also install the same pinned `bw` binary to `/usr/local/bin` (unzip, `sha256sum -c`).
 
-Sun Life: drop the quarterly PDF into `/srv/finance/raw/sunlife/<year>/rrsp__<quarter>.pdf`
-(any name starting with the account ref and `__`). The next load posts the closing
-balance as a valuation with `upsert: true`.
+### Schedules: nightly or every N days
+
+`/etc/ingest/banks.list` holds one bank per line, scraped in that order. The timer
+fires every night, and `ingest due` decides which banks run:
+
+```
+simplii                                          # every night
+sunlife  every=14d anchor=YYYY-MM-DD offset=2d   # every second payday, two days after
+```
+
+`anchor` is any one payday and `offset` gives contributions time to post. A bank is
+due when its latest scheduled day has no successful run on or after it, so a missed
+run (VM off, a code request) catches up the next night. Success dates live in
+`/var/lib/ingest/last-success/`. To check a schedule:
+`/opt/ingest-venv/bin/ingest due --today 2026-12-01`.
+
+### Pension and other balance-only accounts
+
+When a portal shows a balance but has no export, the script ends with a `balance`
+step. It saves the shown text as `<account_ref>__<date>.json` in `raw/`, and the
+loader posts it to Sure as a balance update (`/api/v1/valuations`, upsert), which
+Sure charts over time. Statement PDFs still work: drop one into
+`raw/sunlife/<year>/<account_ref>__<anything>.pdf`, and the `formats` entry picks
+the parser by file type (`{"json": "captured_balance", "pdf": "sunlife_pdf"}`).
 
 ## Recording a bank script (Simplii first)
 
@@ -351,5 +372,5 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 - Simplii: sign-on URL, every selector, CSV columns and date format (`banks/simplii.json` is a placeholder).
 - Amex: the CSV export's column layout isn't published, so the `amex` mapping in `ingest.example.json` is a guess until checked against a real export.
 - Chrome's sandbox inside the container (AppArmor profile plus `seccomp=unconfined`) is untested until the first build on the VM. Run the sandbox check in the table above.
-- Other institutions' flows are not recorded yet; the Sun Life PDF wording is guessed (tests use made-up statements).
+- `banks/sunlife.json` is a placeholder too (URL, labels and the balance element are guesses). Other institutions' flows are not recorded yet; the Sun Life PDF wording is guessed (tests use made-up statements).
 - Container images have not been built in this repo's CI. Build once on the VM and run the checks above.

@@ -146,6 +146,12 @@ class Runner:
             with page.expect_download(timeout=max(t, 60_000)) as info:
                 step.locator.resolve(page).click(timeout=t)
             result.downloads.append(self._save_download(info.value, step.save_as))
+        elif a == "balance":
+            text = step.locator.resolve(page).inner_text(timeout=t).strip()
+            if not re.search(r"\d", text):
+                raise UnexpectedPage(f"the balance element holds no number ({len(text)} chars)")
+            body = json.dumps({"kind": "balance", "date": dt.date.today().isoformat(), "text": text}, ensure_ascii=False)
+            result.downloads.append(self._save_bytes(body.encode(), step.save_as, "json"))
         else:  # pragma: no cover - Step.parse rejects unknown actions
             raise ValueError(a)
 
@@ -155,9 +161,25 @@ class Runner:
             raise UnexpectedPage("the site opened a new window")
 
     def _save_download(self, download, template: str) -> Path:
-        today = dt.date.today()
         suggested = download.suggested_filename or "download"
         ext = Path(suggested).suffix.lstrip(".").lower() or "bin"
+        target = self._raw_target(template, ext)
+        download.save_as(target)
+        return self._seal(target)
+
+    def _save_bytes(self, data: bytes, template: str, ext: str) -> Path:
+        target = self._raw_target(template, ext)
+        target.write_bytes(data)
+        return self._seal(target)
+
+    @staticmethod
+    def _seal(target: Path) -> Path:
+        os.chmod(target, 0o444)
+        log.info("saved %s", target.name)
+        return target
+
+    def _raw_target(self, template: str, ext: str) -> Path:
+        today = dt.date.today()
         name = template.format(today=today.isoformat(), ext=ext)
         if Path(name).name != name or name.startswith("."):
             raise ValueError(f"save_as must be a plain file name, got {name!r}")
@@ -168,9 +190,6 @@ class Runner:
         while target.exists():  # raw files are immutable; never overwrite
             target = folder / f"{Path(name).stem}-{n}{Path(name).suffix}"
             n += 1
-        download.save_as(target)
-        os.chmod(target, 0o444)
-        log.info("saved %s", target.name)
         return target
 
     # -- failure bundle ------------------------------------------------------

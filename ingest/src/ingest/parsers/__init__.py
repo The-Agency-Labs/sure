@@ -42,7 +42,9 @@ def account_ref_from(path: Path) -> str:
 
 def parse_money(text: str) -> Decimal | None:
     """'1,234.56', '$1 234,56', '(12.00)', '-12.00', '12.00 CR' -> Decimal; '' -> None."""
-    t = text.strip().replace(" ", " ").replace("$", "").replace("CAD", "").replace("USD", "").strip()
+    t = " ".join(text.split())
+    t = re.sub(r"(?i)^(total\s+)?(balance|solde|value|valeur)\s*:?\s*", "", t)
+    t = t.strip().replace(" ", " ").replace("$", "").replace("CAD", "").replace("USD", "").strip()
     if not t:
         return None
     negative = (t.startswith("(") and t.endswith(")")) or t.startswith("-") or t.endswith("-")

@@ -83,7 +83,7 @@ CONFIG = {
     "accounts": {"simplii:chequing": "Test Chequing", "sunlife:rrsp": "Test Pension", "amex:gold": "Test Card"},
     "formats": {
         "simplii": {"parser": "simplii"},
-        "sunlife": {"parser": "sunlife_pdf"},
+        "sunlife": {"parser": {"pdf": "sunlife_pdf", "json": "captured_balance"}},
         "amex": {"parser": "mapped_csv", "date": "Date", "description": "Description", "amount": "Amount", "sign": -1, "balance": "Balance"},
     },
 }
@@ -187,3 +187,18 @@ def test_dry_run_writes_jsonl_without_api(tmp_path):
     stats = Loader(CONFIG, raw, tmp_path / "normalized", tmp_path / "review", None).run(dry_run=True)
     assert stats.files == 1 and (tmp_path / "normalized/simplii/chequing__x.jsonl").exists()
     assert not (tmp_path / "normalized/.ledger.json").exists()
+
+
+def test_captured_balance_posts_valuation(tmp_path, sure):
+    raw = setup(tmp_path, {"sunlife/2026/rrsp__2026-11-15.json": json.dumps({"kind": "balance", "date": "2026-11-15", "text": "Total balance $41,234.56"})})
+    stats = loader(tmp_path, raw, sure).run()
+    assert stats.balances == 1 and stats.errors == [] and stats.review == []
+    [(path, body)] = sure.requests
+    assert path == "/api/v1/valuations"
+    assert body["valuation"]["date"] == "2026-11-15" and body["valuation"]["amount"] == "41234.56"
+
+
+def test_unknown_file_kind_for_institution_is_flagged(tmp_path, sure):
+    raw = setup(tmp_path, {"sunlife/2026/rrsp__x.csv": "a,b\n"})
+    stats = loader(tmp_path, raw, sure).run()
+    assert stats.review and "no parser configured for .csv" in (tmp_path / "review/sunlife_2026_rrsp__x.csv.json").read_text()
