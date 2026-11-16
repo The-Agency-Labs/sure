@@ -1,0 +1,93 @@
+# Scraper and loader jobs. Run with `docker compose run --rm <service> ...`
+# (nightly.sh does this); nothing here stays up.
+#
+# Build: docker compose build --build-arg BW_VERSION=... --build-arg BW_SHA256=...
+
+name: ingest
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  environment:
+    INGEST_CONFIG: /etc/ingest/ingest.json
+
+services:
+  scraper:
+    <<: *hardening
+    build: {context: ../.., target: scraper}
+    image: ingest-scraper:local
+    user: "2001:2000"
+    # Chrome's sandbox needs to create user/pid/net namespaces. Docker's default
+    # seccomp profile only allows that with CAP_SYS_ADMIN, so the container's
+    # seccomp filter is off and Chrome's own, stricter seccomp-BPF filter guards
+    # the renderers instead. AppArmor stays on with a profile that adds `userns`.
+    # Still: non-root, no capabilities, no-new-privileges, read-only root.
+    security_opt:
+      - "no-new-privileges:true"
+      - "seccomp=unconfined"
+      - "apparmor=ingest-scraper"
+    shm_size: 1g
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 512
+    environment:
+      INGEST_CONFIG: /etc/ingest/ingest.json
+      HOME: /tmp/home
+    volumes:
+      - /etc/ingest/ingest.json:/etc/ingest/ingest.json:ro
+      - ../../banks:/opt/ingest/ingest/banks:ro
+      - /srv/ingest-secrets:/srv/ingest-secrets
+      - /srv/ingest-state/bundles:/srv/ingest-state/bundles
+      - /srv/finance/raw:/srv/finance/raw
+    ports:
+      # Only used when mfa.unattended is "form". Bind to a LAN/tailnet address only.
+      - "${MFA_BIND:-127.0.0.1}:8765:8765"
+    networks: [scraper_net]
+
+  loader:
+    <<: *hardening
+    build: {context: ../.., target: loader}
+    image: ingest-loader:local
+    user: "2002:2000"
+    cpus: 1
+    mem_limit: 512m
+    pids_limit: 128
+    volumes:
+      - /etc/ingest/ingest.json:/etc/ingest/ingest.json:ro
+      - /srv/loader-secrets/sure_api_key:/run/secrets/sure_api_key:ro
+      - /srv/finance/raw:/srv/finance/raw:ro
+      - /srv/finance/normalized:/srv/finance/normalized
+      - /srv/ingest-state/review:/srv/ingest-state/review
+    networks: [sure_net]
+
+  ollama:
+    # Repair model, CPU-only, on the VM itself. Reachable from the VM's own
+    # shell (127.0.0.1) and nothing else. Unloads the model after each answer
+    # (keep_alive 0), so idle it holds almost no memory.
+    #   docker compose --profile repair up -d ollama
+    #   docker compose exec ollama ollama pull qwen2.5:3b
+    profiles: [repair]
+    image: ollama/ollama:0.12.0
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 3
+    mem_limit: 4g
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - /srv/ollama:/root/.ollama
+    networks: [repair_net]
+
+networks:
+  repair_net: {}
+  scraper_net:
+    external: true
+  sure_net:
+    external: true

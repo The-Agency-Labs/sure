@@ -4,3 +4,5 @@ __pycache__/
 *.egg-info/
 dist/
 deploy/ingest/.env
+# The repo root ignores compose.yml (local Sure installs); ours are templates.
+!compose.yml
