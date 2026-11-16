@@ -79,8 +79,8 @@ def cmd_scrape(args, cfg) -> int:
         headless=browser.get("headless", False),
         channel=browser.get("channel", "chrome"),
         chromium_sandbox=browser.get("chromium_sandbox", True),
-        locale=browser.get("locale", "en-CA"),
-        timezone_id=browser.get("timezone", "America/Toronto"),
+        locale=os.environ.get("INGEST_LOCALE") or browser.get("locale"),
+        timezone_id=os.environ.get("INGEST_TIMEZONE") or browser.get("timezone"),
         mfa_timeout_s=mfa.get("timeout_s", 300),
     )
     note = notifier(cfg)

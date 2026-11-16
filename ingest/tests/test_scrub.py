@@ -15,7 +15,7 @@ RAW = '''- banner:
 - main:
   - heading "Chequing 4500 1234 5678 9012" [level=2]
   - paragraph: Balance $1,234.56
-  - text: 123 Maple Street, Toronto
+  - text: 123 Maple Street, Springfield
   - textbox "Card number": "4500123456789012"
   - textbox "Email": jane.quixote@example.com
   - checkbox "Remember this device" [checked]
@@ -39,7 +39,7 @@ def test_keeps_only_interactive_and_heading_roles_with_names():
 
 def test_values_digits_names_and_urls_are_gone():
     out = scrub_snapshot(RAW)
-    for leak in ("Jane", "Quixote", "4500", "9012", "1,234", "Maple", "Toronto", "jane.quixote", "77812", "session", "bank.example"):
+    for leak in ("Jane", "Quixote", "4500", "9012", "1,234", "Maple", "Springfield", "jane.quixote", "77812", "session", "bank.example"):
         assert leak not in out, leak
     assert 'heading "Chequing #"' in out
     assert 'heading "Welcome back, ‹x›"' in out
@@ -57,7 +57,7 @@ def test_url_pattern():
     assert url_pattern("/a/9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c/x") == "/a/:id/x"
 
 
-SECRETS = ["4500123456789012", "jquixote", "Jane Quixote", "123 Maple Street, Toronto ON", "jane.quixote@example.com", "416-555-0199"]
+SECRETS = ["4500123456789012", "jquixote", "Jane Quixote", "123 Maple Street, Springfield", "jane.quixote@example.com", "416-555-0199"]
 AMOUNTS = [Decimal("1234.56"), Decimal("4.25")]
 
 

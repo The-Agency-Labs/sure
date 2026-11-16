@@ -12,8 +12,8 @@ from ingest.loader import Loader
 from ingest.sure import SureClient
 
 KEY = "test-key"
-ACCOUNTS = [{"id": "11111111-1111-1111-1111-111111111111", "name": "Simplii Chequing"},
-            {"id": "22222222-2222-2222-2222-222222222222", "name": "Sun Life RRSP"}]
+ACCOUNTS = [{"id": "11111111-1111-1111-1111-111111111111", "name": "Test Chequing"},
+            {"id": "22222222-2222-2222-2222-222222222222", "name": "Test Pension"}]
 
 
 class FakeSure:
@@ -80,7 +80,7 @@ def sure():
 
 
 CONFIG = {
-    "accounts": {"simplii:chequing": "Simplii Chequing", "sunlife:rrsp": "Sun Life RRSP", "amex:gold": "Amex Gold"},
+    "accounts": {"simplii:chequing": "Test Chequing", "sunlife:rrsp": "Test Pension", "amex:gold": "Test Card"},
     "formats": {
         "simplii": {"parser": "simplii"},
         "sunlife": {"parser": "sunlife_pdf"},
@@ -153,8 +153,8 @@ def test_balance_match_loads(tmp_path, sure):
     # from the holder's view the balance goes -524.50 -> -600.00 -> -604.00.
     good = "Date,Description,Amount,Balance\n11/02/2026,GROCER,75.50,-600.00\n11/03/2026,COFFEE,4.00,-604.00\n"
     raw = setup(tmp_path, {"amex/2026/gold__x.csv": good})
-    sure_ids = {"Amex Gold": "33333333-3333-3333-3333-333333333333"}
-    ACCOUNTS.append({"id": sure_ids["Amex Gold"], "name": "Amex Gold"})
+    sure_ids = {"Test Card": "33333333-3333-3333-3333-333333333333"}
+    ACCOUNTS.append({"id": sure_ids["Test Card"], "name": "Test Card"})
     try:
         stats = loader(tmp_path, raw, sure).run()
     finally:

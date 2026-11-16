@@ -45,8 +45,10 @@ class RunConfig:
     # a stealth one: with it off, a hostile page that exploits the renderer can
     # read everything this UID can, including the vault credentials.
     chromium_sandbox: bool = True
-    locale: str = "en-CA"
-    timezone_id: str = "America/Toronto"
+    # From the deployment's .env (INGEST_LOCALE, INGEST_TIMEZONE). None = the
+    # system's, which in a container is UTC: set them to match where you are.
+    locale: str | None = None
+    timezone_id: str | None = None
     step_timeout_ms: int = 20_000
     dismiss_wait_ms: int = 4_000
     mfa_detect_ms: int = 8_000

@@ -26,8 +26,8 @@ fi
 mountpoint -q /srv/finance || mount /srv/finance
 findmnt -t virtiofs /srv/finance >/dev/null || { echo "/srv/finance is not a virtiofs mount; check the Proxmox directory mapping 'finance-data'" >&2; exit 1; }
 
-# These live on naspool. virtiofs passes UIDs through, so this is the same as
-# deploy/host/cassio-finance-perms.sh on the host; either side works.
+# These live on the host's finance dataset. virtiofs passes UIDs through, so
+# this is the same as deploy/host/host-finance-perms.sh on the host.
 install -d -o "$SCRAPER_UID" -g finance -m 2750 /srv/finance/raw
 install -d -o "$LOADER_UID"  -g finance -m 0750 /srv/finance/normalized
 install -d -o root -g root -m 0700 /srv/finance/sure-backups

@@ -36,6 +36,8 @@ services:
     environment:
       INGEST_CONFIG: /etc/ingest/ingest.json
       HOME: /tmp/home
+      INGEST_LOCALE: ${INGEST_LOCALE:?set INGEST_LOCALE in deploy/ingest/.env}
+      INGEST_TIMEZONE: ${INGEST_TIMEZONE:?set INGEST_TIMEZONE in deploy/ingest/.env}
     volumes:
       - /etc/ingest/ingest.json:/etc/ingest/ingest.json:ro
       - ../../banks:/opt/ingest/ingest/banks:ro

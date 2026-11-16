@@ -1,7 +1,6 @@
 # ingest: bank data into a self-hosted Sure
 
-Pulls statements and transactions from E\*TRADE, Wealthsimple, Simplii, Amex and
-Sun Life into Sure, with no third-party aggregator anywhere in the path. Every
+Pulls statements and transactions from your banks, card issuers and brokers into Sure, with no third-party aggregator anywhere in the path. Every
 institution is driven by a deterministic Playwright script on our own hardware;
 a local model is only ever used offline, by a human, to propose a fix for a
 broken script.
@@ -35,7 +34,7 @@ ingest/
  │  Sure (web, worker, db, redis, backup) on sure_net ── web bound to the │
  │  tailnet IP only (never the LAN); backups to sure-backups every 6 h    │
  └────────────────────────────────────────────────────────────────────────┘
-   /srv/finance = naspool/finance via virtiofs     Vaultwarden LXC (bank logins)
+   /srv/finance = host ZFS dataset via virtiofs    Bitwarden-compatible vault (bank logins)
    push (optional, generic text) ◄── failures      Ollama on this VM, 127.0.0.1 (repair only)
 ```
 
@@ -92,7 +91,7 @@ via `accounts` in `ingest.json`.
   reach the network, so the guard that matters is the `post` list: any
   state-changing request not on it is aborted. Keep `post` to the exact sign-on
   and export endpoints.
-- **Secrets** come from a dedicated Vaultwarden account with only the bank logins,
+- **Secrets** come from a dedicated vault account (Bitwarden or Vaultwarden) with only the bank logins,
   through `bw` with a temporary appdata dir. They're unlocked at run time, go
   straight into `locator.fill`, and are locked after. They never appear in the
   container env, CLI args, logs, traces or bundles; error text is redacted against
@@ -112,7 +111,7 @@ via `accounts` in `ingest.json`.
   instead, set `"form"`: it serves a one-time page (random URL token) on `MFA_BIND`
   and sends its link in the push.
 - **Not announcing automation:** real Chrome, headed under Xvfb (so no "HeadlessChrome"
-  user agent), real window size, Canadian locale and timezone, and Playwright's
+  user agent), real window size, locale and timezone from `.env`, and Playwright's
   `--enable-automation` removed, so `navigator.webdriver` is false (tested). This
   avoids the obvious tells. It doesn't defeat serious fingerprinting; the persistent
   profile is what does most of the work.
@@ -160,10 +159,10 @@ type `yes` before it's written and committed.
 
 Run all VM steps in a root shell.
 
-1. **Host (cassio).** Create the `finance-data` virtiofs directory mapping for
-   `/naspool/finance` and attach it to the VM. Then set ownership to match the
-   VM's UIDs (virtiofs passes them through):
-   `deploy/host/cassio-finance-perms.sh`
+1. **Proxmox host.** Create a ZFS dataset for the finance data, add a virtiofs
+   directory mapping named `finance-data` for its mountpoint, and attach it to the
+   VM. Then set ownership to match the VM's UIDs (virtiofs passes them through):
+   `deploy/host/host-finance-perms.sh <pool>/finance`
 2. **Checkout on the VM:**
    ```sh
    git clone --filter=blob:none --sparse https://github.com/The-Agency-Labs/sure /opt/ingest
@@ -182,12 +181,12 @@ Run all VM steps in a root shell.
    `cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup`.
    Create your user and accounts in the UI. Then create an API key with read/write
    scope under Settings and write it to `/srv/loader-secrets/sure_api_key`.
-4. **Vault:** in Vaultwarden, create a dedicated account (or org collection) that
+4. **Vault:** in your vault server, create a dedicated account (or org collection) that
    holds only the bank logins. Name the items after the bank (`simplii`, `amex`, …).
    Put the API key client id/secret, the server URL and the master password in
    `/srv/ingest-secrets/bw/{bw_clientid,bw_clientsecret,bw_server,bw_password}`.
 5. **Config:** edit `/etc/ingest/ingest.json` (push target in `notify`, `accounts`
-   mapping, and timezone if not Toronto). Copy `deploy/ingest/sensitive.example.json`
+   mapping). Set `INGEST_LOCALE` and `INGEST_TIMEZONE` in `deploy/ingest/.env`. Copy `deploy/ingest/sensitive.example.json`
    to `/srv/ingest-secrets/sensitive.json` and fill it in. List the banks in
    `/etc/ingest/banks.list`.
 6. **Build:** `cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=<x> --build-arg BW_SHA256=<sha>`
@@ -276,7 +275,7 @@ roughly a minute or two (an estimate, not measured). That's fine for a rare,
 human-attended fix. The job is narrow (match an intent like "download transactions"
 to one of the listed elements, in a fixed schema), and every answer is validated and
 reviewed. If the 3B model's suggestions turn out poor, point `--endpoint` at the
-main PC (GTX 1060 6 GB) running `qwen2.5:7b-instruct-q4_K_M`. That needs Ollama
+desktop with a GPU (6 GB VRAM runs `qwen2.5:7b-instruct-q4_K_M`). That needs Ollama
 there with the firewall rules below.
 
 ## Tests
@@ -315,7 +314,7 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | What | Command (VM, root unless noted) | Expect |
 |---|---|---|
 | virtiofs mount | `findmnt -t virtiofs /srv/finance` | the `finance-data` source |
-| UID passthrough | `su -s /bin/sh ingest-scraper -c 'touch /srv/finance/raw/.t && rm /srv/finance/raw/.t'`, then on cassio `ls -ln /naspool/finance` | raw owned by 2001:2000 |
+| UID passthrough | `su -s /bin/sh ingest-scraper -c 'touch /srv/finance/raw/.t && rm /srv/finance/raw/.t'`, then on the host `ls -ln <dataset mountpoint>` | raw owned by 2001:2000 |
 | secrets not on share | `ls /srv/finance` | only `raw normalized sure-backups` |
 | bw login | `docker compose run --rm --entrypoint python scraper -c "from ingest.secrets import BitwardenStore as B; from pathlib import Path; s=B(Path('/srv/ingest-secrets/bw')); print(len(s.get('simplii/username'))>0); s.close()"` | `True` (never print the value) |
 | Chrome sandbox works in the container | `docker compose run --rm --entrypoint sh scraper -c 'xvfb-run -a google-chrome --headless=new --dump-dom about:blank'` | `<html>…` and no "No usable sandbox" |
@@ -332,7 +331,7 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | timer | `systemctl list-timers ingest-nightly.timer` | next run ~03:30 |
 | backups | `ls /srv/finance/sure-backups/*/` after 6 h | `*-scheduled` folders |
 
-Only if you use the main PC as the repair endpoint: firewall it so only the finance VM reaches 11434.
+Only if you use another machine as the repair endpoint: firewall it so only the finance VM reaches 11434.
 
 - Linux:
   ```sh
@@ -349,7 +348,7 @@ Only if you use the main PC as the repair endpoint: firewall it so only the fina
 ## Still unverified
 
 - Simplii: sign-on URL, every selector, CSV columns and date format (`banks/simplii.json` is a placeholder).
-- Amex (Canadian card): Amex Canada offers CSV and Excel downloads but publishes no column layout, so the `amex` mapping in `ingest.example.json` is a guess until checked against a real export.
+- Amex: the CSV export's column layout isn't published, so the `amex` mapping in `ingest.example.json` is a guess until checked against a real export.
 - Chrome's sandbox inside the container (AppArmor profile plus `seccomp=unconfined`) is untested until the first build on the VM. Run the sandbox check in the table above.
-- E\*TRADE, Wealthsimple, Sun Life flows are not recorded yet; the Sun Life PDF wording is guessed (tests use made-up statements).
+- Other institutions' flows are not recorded yet; the Sun Life PDF wording is guessed (tests use made-up statements).
 - Container images have not been built in this repo's CI. Build once on the VM and run the checks above.

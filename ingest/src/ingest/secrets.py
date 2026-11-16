@@ -1,4 +1,4 @@
-"""Bank logins from Vaultwarden, via the ``bw`` CLI.
+"""Bank logins from a Bitwarden-compatible vault, via the ``bw`` CLI.
 
 Secret names look like ``simplii/password``: the part before the slash is the
 vault item name, the part after is ``username``, ``password``, ``totp`` or a
@@ -7,7 +7,7 @@ are never put in the container environment, logs, CLI arguments, traces or
 screenshots.
 
 Files under the credentials directory (scraper UID only, mode 600):
-  bw_server         Vaultwarden URL
+  bw_server         vault server URL
   bw_clientid       API key client id of the dedicated bank-logins account
   bw_clientsecret   API key client secret
   bw_password       master password (needed to unlock after an API-key login)

@@ -3,8 +3,8 @@
 # Based on upstream compose.example.yml (keep in step when upgrading). Changes:
 #   - web binds to SURE_BIND_ADDR, the VM's tailnet IP, only (tailnet-only access); APP_DOMAIN and SSL flags from .env;
 #   - redis pinned instead of :latest;
-#   - backups go to /srv/finance/sure-backups (naspool via virtiofs), every 6 hours;
-#   - backup-offsite removed (naspool + sanoid snapshots cover history);
+#   - backups go to /srv/finance/sure-backups (the host dataset via virtiofs), every 6 hours;
+#   - backup-offsite removed (host-side ZFS snapshots cover history);
 #   - no OpenAI/hosted-LLM settings and no hard-coded public DNS servers;
 #   - sure_net is an external network so the ingest loader can join it.
 # The backup service keeps upstream's user "0"; web/worker keep the image's UID 1000.

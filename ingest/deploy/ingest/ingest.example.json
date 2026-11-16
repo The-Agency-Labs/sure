@@ -11,9 +11,7 @@
   "browser": {
     "channel": "chrome",
     "headless": false,
-    "chromium_sandbox": true,
-    "locale": "en-CA",
-    "timezone": "America/Toronto"
+    "chromium_sandbox": true
   },
   "mfa": {
     "unattended": "stop",
@@ -36,8 +34,9 @@
     "sensitive_file": "/srv/ingest-secrets/sensitive.json"
   },
   "accounts": {
-    "simplii:chequing": "Simplii Chequing",
-    "sunlife:rrsp": "Sun Life Group RRSP"
+    "_format": "<institution>:<account_ref from the raw file name>": "<account name in Sure>",
+    "simplii:chequing": "Everyday Chequing",
+    "sunlife:pension": "Workplace Pension"
   },
   "formats": {
     "simplii": {"parser": "simplii"},
