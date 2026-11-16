@@ -66,6 +66,13 @@ echo "== Docker networks"
 docker network inspect sure_net    >/dev/null 2>&1 || docker network create sure_net
 docker network inspect scraper_net >/dev/null 2>&1 || docker network create scraper_net
 
+echo "== Docker starts after Tailscale (Sure binds the tailnet IP only)"
+install -d -m 0755 /etc/systemd/system/docker.service.d
+install -m 0644 "$REPO/ingest/deploy/systemd/docker.service.d/10-after-tailscale.conf" /etc/systemd/system/docker.service.d/
+TS_IP=$(tailscale ip -4 2>/dev/null || true)
+[ -n "$TS_IP" ] && echo "   this VM's tailnet IP: $TS_IP  (use it for SURE_BIND_ADDR in /opt/sure/.env)" \
+  || echo "   tailscale has no IPv4 address yet: bring it up, then set SURE_BIND_ADDR" >&2
+
 echo "== systemd timer"
 install -m 0644 "$REPO/ingest/deploy/systemd/ingest-nightly.service" /etc/systemd/system/
 install -m 0644 "$REPO/ingest/deploy/systemd/ingest-nightly.timer" /etc/systemd/system/
@@ -75,7 +82,7 @@ systemctl enable ingest-nightly.timer
 cat <<'NEXT'
 
 Done. Still to do by hand (see ingest/README.md, "Setup"):
-  1. Fill /opt/sure/.env, then: cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup
+  1. Fill /opt/sure/.env (SURE_BIND_ADDR = the tailnet IP above), then: cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup
   2. Create a Sure API key (read_write); write it to /srv/loader-secrets/sure_api_key
   3. Fill /srv/ingest-secrets/bw/* (dedicated bank-logins vault account)
   4. Edit /etc/ingest/ingest.json and /etc/ingest/banks.list

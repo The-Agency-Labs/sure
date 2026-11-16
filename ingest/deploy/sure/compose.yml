@@ -1,7 +1,7 @@
 # Sure for the finance VM. Copy to /opt/sure/compose.yml with .env next to it.
 #
 # Based on upstream compose.example.yml (keep in step when upgrading). Changes:
-#   - web binds to SURE_BIND_ADDR (the VM's LAN/tailnet IP) only; APP_DOMAIN and SSL flags from .env;
+#   - web binds to SURE_BIND_ADDR, the VM's tailnet IP, only (tailnet-only access); APP_DOMAIN and SSL flags from .env;
 #   - redis pinned instead of :latest;
 #   - backups go to /srv/finance/sure-backups (naspool via virtiofs), every 6 hours;
 #   - backup-offsite removed (naspool + sanoid snapshots cover history);
