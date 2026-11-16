@@ -31,8 +31,8 @@ ingest/
  │        ▼                                     ▼               ▼         │
  │  /srv/finance/raw/<bank>/<year>/  ──────────►  /srv/finance/normalized │
  │                                                                        │
- │  Sure (web, worker, db, redis, backup) on sure_net ── web bound to the │
- │  tailnet IP only (never the LAN); backups to sure-backups every 6 h    │
+ │  Sure (web, worker, db, redis, backup) on sure_net ── web on 127.0.0.1 │
+ │  behind Tailscale Serve (tailnet-only HTTPS); backups every 6 h        │
  └────────────────────────────────────────────────────────────────────────┘
    /srv/finance = host ZFS dataset via virtiofs    Bitwarden-compatible vault (bank logins)
    push (optional, generic text) ◄── failures      Ollama on a GPU machine, tailnet only (repair only)
@@ -172,11 +172,14 @@ Run all VM steps in a root shell.
    the directories and permissions in the table above, the `/srv/finance` fstab
    entry, the `sure_net` and `scraper_net` networks, the systemd timer, and starter
    copies of the configs.
-3. **Sure:** fill `/opt/sure/.env` (`SECRET_KEY_BASE`, `POSTGRES_PASSWORD`,
-   `SURE_BIND_ADDR` = the VM's tailnet IP from `tailscale ip -4`, never the LAN IP).
-   Sure is reachable only over the tailnet. `vm-setup.sh` makes Docker wait for
-   Tailscale at boot, because Docker can't publish a port on an address that doesn't
-   exist yet and won't retry a container that failed to bind. Then
+3. **Sure:** fill `/opt/sure/.env`: `SECRET_KEY_BASE`, `POSTGRES_PASSWORD`,
+   `SURE_BIND_ADDR=127.0.0.1`, `APP_DOMAIN=<vm>.<tailnet>.ts.net`, `RAILS_ASSUME_SSL=true`.
+   Then put Tailscale Serve in front. It needs MagicDNS and HTTPS certificates on in
+   the tailnet; the setting persists across reboots:
+   `tailscale serve --bg --https=443 http://127.0.0.1:3000`.
+   Sure is then reachable only at `https://<vm>.<tailnet>.ts.net`, from tailnet
+   devices. (Binding the tailnet IP directly also works; `vm-setup.sh` makes Docker
+   wait for Tailscale at boot for that case.) Then
    `cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup`.
    Create your user and accounts in the UI. Then create an API key with read/write
    scope under Settings and write it to `/srv/loader-secrets/sure_api_key`.
@@ -330,9 +333,10 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | Chrome sandbox works in the container | `docker compose run --rm --entrypoint sh scraper -c 'xvfb-run -a google-chrome --headless=new --dump-dom about:blank'` | `<html>…` and no "No usable sandbox" |
 | AppArmor profile loaded | `aa-status \| grep ingest-scraper` | listed in enforce mode |
 | push | trigger a test via the configured `notify` target | push arrives |
-| Sure bound to the tailnet only | `ss -ltnp \| grep 3000` | only the `100.x` tailnet IP |
+| Sure bound to localhost only | `ss -ltnp \| grep 3000` | only `127.0.0.1:3000` |
+| Serve in front | `tailscale serve status` | `https://<vm>.<tailnet>.ts.net (tailnet only)` → `127.0.0.1:3000` |
+| Sure on the tailnet over HTTPS | `curl -s -o /dev/null -w "%{http_code}" https://<vm>.<tailnet>.ts.net/up` from a tailnet device | `200` |
 | Sure not on the LAN | `curl -m 3 http://<VM LAN IP>:3000` from another LAN machine | timeout/refused |
-| Sure on the tailnet | `curl -sI http://<tailnet IP>:3000` from a tailnet device | `HTTP/1.1 200` or a redirect |
 | Sure comes back after reboot | `reboot`, then `docker compose -f /opt/sure/compose.yml ps` | `web` running |
 | scraper can't reach Sure | `docker compose run --rm --entrypoint python scraper -c "import socket; socket.create_connection(('web',3000),3)"` | fails (name not resolved) |
 | Ollama reachable from the VM | `curl -s http://<GPU machine tailnet IP>:11434/api/tags` on the VM | JSON list with the model |
