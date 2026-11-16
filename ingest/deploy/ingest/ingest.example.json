@@ -34,7 +34,7 @@
     "sensitive_file": "/srv/ingest-secrets/sensitive.json"
   },
   "accounts": {
-    "_format": "<institution>:<account_ref from the raw file name>": "<account name in Sure>",
+    "_format": "\"<institution>:<account_ref from the raw file name>\": \"<account name in Sure>\"",
     "simplii:chequing": "Everyday Chequing",
     "sunlife:pension": "Workplace Pension"
   },
