@@ -22,6 +22,9 @@ def run(playwright: Playwright) -> None:
     page.get_by_text("Thanks, Jane").click()
     page.locator("#acct-44551234 >> text=Jane Quixote").click()
     page.get_by_role("combobox", name="Format").select_option("CSV")
+    page.locator('[data-test-id="card-number-input"]').click()
+    page.locator('[data-test-id="account-4455-Jane"]').click()
+    page.get_by_role("link", name="Download Oct 16 to Nov 15").click()
     page.get_by_test_id("row-998877").nth(2).click()
     with page.expect_download() as download_info:
         page.get_by_role("button", name="Download transactions").click()
@@ -54,6 +57,9 @@ def test_structure_is_kept():
     assert 'select role=combobox "Format"   "CSV"' in out
     assert "expect download:" in out and '    click  role=button "Download transactions"' in out
     assert "[skipped: .evaluate(...)]" in out
+    assert 'click  css [data-test-id="card-number-input"]' in out
+    assert 'click  css [data-test-id="account - # - ‹x›"]' in out
+    assert 'click  role=link "Download Oct # to Nov #"' in out
 
 
 def test_keep_words_and_check(tmp_path):

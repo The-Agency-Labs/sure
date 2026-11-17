@@ -19,7 +19,16 @@ import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import re
+
+from .pdf_structure import MONTHS
 from .scrub import SensitiveValueFound, blocking_check, scrub_name, url_pattern
+
+# [data-test-id="card-number-input"]: attribute names and lowercase-hyphenated
+# values are developer labels, kept as-is. Anything else in a selector (text,
+# digits, mixed case) goes through scrub_name.
+_ATTR = re.compile(r'\[\s*([a-z][a-z0-9_-]*)\s*([~|^$*]?=)\s*"([^"]*)"\s*\]')
+_DEV_LABEL = re.compile(r"[a-z]+(?:[-_][a-z]+)*")
 
 GETTERS = {
     "get_by_role", "get_by_label", "get_by_text", "get_by_placeholder", "get_by_test_id",
@@ -32,13 +41,18 @@ WAITS = {"expect_download": "download", "expect_popup": "new tab", "expect_navig
 
 class Cleaner:
     def __init__(self, keep: frozenset[str] = frozenset()):
-        self.keep = frozenset(w.lower() for w in keep)
+        self.keep = frozenset(w.lower() for w in keep) | MONTHS
 
     def text(self, value: str) -> str:
         return f'"{scrub_name(value, self.keep)}"'
 
     def css(self, value: str) -> str:
-        # Selectors can embed visible text (text=..., :has-text("...")) and ids.
+        m = _ATTR.fullmatch(value.strip())
+        if m:
+            attr, op, val = m.groups()
+            shown = val if _DEV_LABEL.fullmatch(val) else scrub_name(val, self.keep)
+            return f'css [{attr}{op}"{shown}"]'
+        # Other selectors can embed visible text (text=..., :has-text("...")) and ids.
         return f"css {scrub_name(value, self.keep | frozenset(('css', 'id', 'class', 'div', 'span', 'button', 'input', 'nth', 'child', 'text', 'has')))}"
 
     def url(self, value: str) -> str:
