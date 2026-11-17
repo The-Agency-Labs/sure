@@ -40,9 +40,9 @@ def vocabulary() -> frozenset[str]:
     )
 
 
-def scrub_name(name: str) -> str:
+def scrub_name(name: str, extra_words: frozenset[str] = frozenset()) -> str:
     name = re.sub(r"\d+", "#", name.replace('\\"', '"'))
-    vocab = vocabulary()
+    vocab = vocabulary() | extra_words
     out = []
     for token in _WORD.findall(name):
         if token.startswith("#") or not token[0].isalpha():

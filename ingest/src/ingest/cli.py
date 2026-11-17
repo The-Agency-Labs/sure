@@ -210,6 +210,12 @@ def cmd_due(args, cfg) -> int:
     return 0
 
 
+def cmd_clean_recording(args, cfg) -> int:
+    from .clean_recording import main_clean
+
+    return main_clean(Path(args.recording), args.keep or [], Path(args.check) if args.check else None)
+
+
 def cmd_check(args, cfg) -> int:
     from .steps import Script
 
@@ -247,6 +253,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--state", default="/var/lib/ingest/last-success")
     s.add_argument("--today", help="YYYY-MM-DD, for checking a schedule")
     s.set_defaults(fn=cmd_due, no_config=True)
+
+    s = sub.add_parser("clean-recording", help="strip a codegen recording down to a shareable skeleton")
+    s.add_argument("recording", help="the file written by: playwright codegen --target python -o <file>")
+    s.add_argument("--keep", nargs="*", help="extra words you are happy to share (e.g. the bank's brand)")
+    s.add_argument("--check", help='JSON {"values": [...]}: refuse to print if any of them remain')
+    s.set_defaults(fn=cmd_clean_recording, no_config=True)
 
     s = sub.add_parser("check", help="validate a bank script")
     s.add_argument("script")
