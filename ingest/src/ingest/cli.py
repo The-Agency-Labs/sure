@@ -222,6 +222,12 @@ def cmd_pdf_structure(args, cfg) -> int:
     return main_structure(Path(args.pdf), args.keep or [], Path(args.check) if args.check else None)
 
 
+def cmd_record(args, cfg) -> int:
+    from .record import record
+
+    return record(args.url, Path(args.output), args.channel)
+
+
 def cmd_check(args, cfg) -> int:
     from .steps import Script
 
@@ -271,6 +277,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--keep", nargs="*", help="extra words you are happy to share")
     s.add_argument("--check", help='JSON {"values": [...]}: refuse to print if any of them remain')
     s.set_defaults(fn=cmd_pdf_structure, no_config=True)
+
+    s = sub.add_parser("record", help="record a bank routine in a browser set up like the scraper")
+    s.add_argument("url")
+    s.add_argument("-o", "--output", required=True, help="where the recording goes (use /dev/shm: it holds what you type)")
+    s.add_argument("--channel", help="chrome to use installed Google Chrome; default is Playwright's Chromium")
+    s.set_defaults(fn=cmd_record, no_config=True)
 
     s = sub.add_parser("check", help="validate a bank script")
     s.add_argument("script")
