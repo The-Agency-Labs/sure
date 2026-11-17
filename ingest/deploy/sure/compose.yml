@@ -3,7 +3,7 @@
 # Based on upstream compose.example.yml (keep in step when upgrading). Changes:
 #   - web binds to SURE_BIND_ADDR only: 127.0.0.1 behind Tailscale Serve (tailnet-only HTTPS); APP_DOMAIN and SSL flags from .env;
 #   - redis pinned instead of :latest;
-#   - backups go to /srv/finance/sure-backups (the host dataset via virtiofs), every 6 hours;
+#   - backups go to /srv/finance/sure-backups (the host dataset via virtiofs), daily at 09:00 UTC;
 #   - backup-offsite removed (host-side ZFS snapshots cover history);
 #   - no OpenAI/hosted-LLM settings and no hard-coded public DNS servers;
 #   - sure_net is an external network so the ingest loader can join it.
@@ -95,7 +95,7 @@ services:
     environment:
       <<: *db_env
       POSTGRES_HOST: db
-      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 */6 * * *}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 9 * * *}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       INSTANCE_ID: ${INSTANCE_ID:-finance}
     depends_on:

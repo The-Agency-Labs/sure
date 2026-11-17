@@ -32,7 +32,7 @@ ingest/
  │  /srv/finance/raw/<bank>/<year>/  ──────────►  /srv/finance/normalized │
  │                                                                        │
  │  Sure (web, worker, db, redis, backup) on sure_net ── web on 127.0.0.1 │
- │  behind Tailscale Serve (tailnet-only HTTPS); backups every 6 h        │
+ │  behind Tailscale Serve (tailnet-only HTTPS); daily backups            │
  └────────────────────────────────────────────────────────────────────────┘
    /srv/finance = host ZFS dataset via virtiofs    Bitwarden-compatible vault (bank logins)
    push (optional, generic text) ◄── failures      Ollama on a GPU machine, tailnet only (repair only)
@@ -365,7 +365,7 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | Ollama uses the GPU | `journalctl -u ollama \| grep "inference compute"` on the GPU machine | `library=CUDA`, not `cpu` |
 | Ollama structured output | `curl -s http://<GPU machine tailnet IP>:11434/api/chat -d '{"model":"<m>","stream":false,"keep_alive":0,"format":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]},"messages":[{"role":"user","content":"say ok"}]}'` | `{"ok":true}` in `message.content` |
 | timer | `systemctl list-timers ingest-nightly.timer` | next run ~03:30 |
-| backups | `ls /srv/finance/sure-backups/*/` after 6 h | `*-scheduled` folders |
+| backups | `ls /srv/finance/sure-backups/*/` after 09:00 UTC | `*-scheduled` folders |
 
 ## Still unverified
 
