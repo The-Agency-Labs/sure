@@ -287,3 +287,21 @@ def test_select_refuses_an_ambiguous_stored_value(tmp_path):
     assert bank.exports == []
     bundle = (result.failure_bundle / "bundle.json").read_text()
     assert "991" not in bundle.replace("#", "")
+
+
+def test_nothing_to_download_is_skipped_and_the_run_continues(tmp_path):
+    secrets = dict(SECRETS, **{"fakebank/card": "9911", "fakebank/quiet": "9912"})
+    with fakebank.FakeBank() as bank:
+        data = _dropdown_script(bank.url)
+        empty = {"text": "There are no transactions found"}
+        data["steps"][-1]["empty"] = empty
+        quiet = [dict(s) for s in data["steps"][1:]]
+        quiet[1]["option_secret"] = "fakebank/quiet"
+        quiet[-1]["save_as"] = "quiet__{today}.{ext}"
+        # The quiet account first: its message shows, then the card still downloads.
+        data["steps"] = [data["steps"][0], *quiet, *data["steps"][1:]]
+        runner, _ = make_runner(tmp_path, data, secrets=secrets)
+        result = runner.run()
+    assert result.ok, result.error
+    assert [p.name.split("__")[0] for p in result.downloads] == ["card"]
+    assert bank.exports == ["acct=a2&fmt=CSV"]

@@ -143,7 +143,9 @@ class Runner:
                 if not getattr(self.codes, "attended", False):
                     self.codes.wait_for_code(0)  # notifies and raises MfaNeeded
                     raise MfaNeeded("verification code needed; nobody to answer")
-                step.request.resolve(page).click(timeout=t)
+                ask = step.request.resolve(page)
+                if ask.count():  # some banks (or some visits) send the code without being asked
+                    ask.first.click(timeout=t)
             log.info("verification prompt shown; waiting for the code")
             code = self.codes.wait_for_code(self.config.mfa_timeout_s)
             self._used_secrets.append(code)
@@ -166,10 +168,12 @@ class Runner:
             if len(matches) != 1:
                 raise UnexpectedPage(f"{len(matches)} of {len(labels)} options match {name}")
             field.select_option(index=matches[0], timeout=t)
-        elif a == "download":
+        elif a == "download" and step.empty is None:
             with page.expect_download(timeout=max(t, 60_000)) as info:
                 step.locator.resolve(page).click(timeout=t)
             result.downloads.append(self._save_download(info.value, step.save_as))
+        elif a == "download":
+            self._download_or_empty(page, step, result, t)
         elif a == "balance":
             text = step.locator.resolve(page).inner_text(timeout=t).strip()
             if not re.search(r"\d", text):
@@ -183,6 +187,28 @@ class Runner:
             raise UnexpectedPage(f"navigation to {self._blocked_navigation} was aborted")
         if self._extra_pages:
             raise UnexpectedPage("the site opened a new window")
+
+    def _download_or_empty(self, page, step: Step, result: RunResult, t: int) -> None:
+        """Click, then wait for whichever comes first: a file, or the bank's
+        "nothing to download" message. A message already showing before the
+        click (left over from an earlier attempt) only counts once it has had
+        time to be replaced."""
+        empty = step.empty.resolve(page)
+        stale = empty.first.is_visible()
+        got: list = []
+        page.once("download", lambda download: got.append(download))
+        step.locator.resolve(page).click(timeout=t)
+        waited, limit = 0, max(t, 60_000)
+        while waited < limit:
+            if got:
+                result.downloads.append(self._save_download(got[0], step.save_as))
+                return
+            if empty.first.is_visible() and (not stale or waited >= 5_000):
+                log.info("nothing to download (%s)", step.intent)
+                return
+            page.wait_for_timeout(250)
+            waited += 250
+        raise PlaywrightTimeout(f"no download and no 'nothing to download' message within {limit // 1000}s")
 
     def _save_download(self, download, template: str) -> Path:
         suggested = download.suggested_filename or "download"

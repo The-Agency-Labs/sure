@@ -25,6 +25,9 @@ Step actions:
                                         (``option_secret``: keeps account
                                         numbers out of the script)
   download  {locator, save_as}          click and save the download
+            [empty]                     optional: a message meaning "nothing to
+                                        download"; if it appears instead of a
+                                        file, the step is skipped, not failed
   balance   {locator, save_as}          save the text of a balance shown on the
                                         page (for portals with no export); the
                                         loader turns it into a balance update
@@ -107,6 +110,7 @@ class Step:
     submit: Locator | None = None
     request: Locator | None = None
     remember: Locator | None = None
+    empty: Locator | None = None
     option: str | None = None
     option_secret: str | None = None
     timeout_ms: int | None = None
@@ -137,6 +141,7 @@ class Step:
             submit=loc("submit"),
             request=loc("request"),
             remember=loc("remember"),
+            empty=loc("empty"),
             option=data.get("option"),
             option_secret=data.get("option_secret"),
             timeout_ms=data.get("timeout_ms"),
@@ -170,7 +175,7 @@ class Step:
         for key in ("url", "secret", "save_as", "option", "option_secret", "timeout_ms"):
             if getattr(self, key) is not None:
                 d[key] = getattr(self, key)
-        for key in ("locator", "detect", "input", "submit", "request", "remember"):
+        for key in ("locator", "detect", "input", "submit", "request", "remember", "empty"):
             if getattr(self, key) is not None:
                 d[key] = getattr(self, key).to_dict()
         return d

@@ -47,13 +47,15 @@ MFA_SEND = """<h1>Verify your identity</h1>
 <button>Verify</button></form>"""
 
 DOWNLOAD_PAGE = """<h1>Download transactions</h1>
+<nav><a href="/download">Download page</a></nav>
 <label>Account <select id=acct>
   <option value="a1">Chequing 4455-1234</option>
   <option value="a2">Visa ending 9911</option>
   <option value="a3">Visa ending 9912</option>
 </select></label>
 <label>Format <select id=fmt><option>Quicken</option><option>CSV</option></select></label>
-<button onclick="location.href='/export/transactions.csv?acct=' + acct.value + '&fmt=' + fmt.value">Download</button>"""
+<button onclick="if (acct.value === 'a3') { document.getElementById('msg').hidden = false } else { location.href='/export/transactions.csv?acct=' + acct.value + '&fmt=' + fmt.value }">Download</button>
+<p id=msg role=alert hidden>There are no transactions found that meet your request.</p>"""
 
 ACCOUNTS = """<h1>Accounts</h1>
 <p>Welcome back, {holder}</p>
