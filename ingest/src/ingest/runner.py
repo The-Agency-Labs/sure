@@ -22,7 +22,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
-from .notify import CodeProvider, Notifier
+from .notify import CodeProvider, MfaNeeded, Notifier
 from .scrub import scrub_snapshot, url_pattern
 from .secrets import SecretStore
 from .steps import Script, Step
@@ -137,11 +137,35 @@ class Runner:
             except PlaywrightTimeout:
                 log.info("no verification prompt; device still remembered")
                 return
-            log.info("verification prompt shown; waiting for the code form")
+            if step.request is not None:
+                # The bank sends the code only when asked. Nobody to answer (an
+                # unattended run): stop before asking, so no code is sent at 3 a.m.
+                if not getattr(self.codes, "attended", False):
+                    self.codes.wait_for_code(0)  # notifies and raises MfaNeeded
+                    raise MfaNeeded("verification code needed; nobody to answer")
+                step.request.resolve(page).click(timeout=t)
+            log.info("verification prompt shown; waiting for the code")
             code = self.codes.wait_for_code(self.config.mfa_timeout_s)
             self._used_secrets.append(code)
             step.input.resolve(page).fill(code, timeout=t)
+            if step.remember is not None:
+                box = step.remember.resolve(page)
+                if box.count() and not box.is_checked():
+                    box.check(timeout=t)
             step.submit.resolve(page).click(timeout=t)
+        elif a == "select":
+            field = step.locator.resolve(page)
+            if step.option is not None:
+                wanted, name = step.option, repr(step.option)
+            else:
+                wanted, name = self.secrets.get(step.option_secret), step.option_secret
+                self._used_secrets.append(wanted)
+            labels = [label.strip() for label in field.locator("option").all_inner_texts()]
+            exact = [i for i, label in enumerate(labels) if label == wanted]
+            matches = exact or [i for i, label in enumerate(labels) if wanted in label]
+            if len(matches) != 1:
+                raise UnexpectedPage(f"{len(matches)} of {len(labels)} options match {name}")
+            field.select_option(index=matches[0], timeout=t)
         elif a == "download":
             with page.expect_download(timeout=max(t, 60_000)) as info:
                 step.locator.resolve(page).click(timeout=t)

@@ -76,6 +76,8 @@ class MfaNeeded(RuntimeError):
 
 
 class NoWaitCodes:
+    attended = False
+
     def __init__(self, notifier: "Notifier", institution: str):
         self.notifier, self.institution = notifier, institution
 
@@ -86,6 +88,8 @@ class NoWaitCodes:
 
 class TerminalCodes:
     """For a run started by hand: ask in the terminal."""
+
+    attended = True
 
     def wait_for_code(self, timeout_s: float) -> str:
         import getpass
@@ -110,6 +114,8 @@ FORM = """<!doctype html><meta name=viewport content="width=device-width">
 class MfaServer:
     """A one-shot form on the LAN/tailnet. The path carries a random token, so a
     stray visitor can't submit a code, and the server stops once a code arrives."""
+
+    attended = True
 
     def __init__(self, bind: str, port: int, public_base: str, notifier: Notifier):
         self.bind, self.port, self.public_base = bind, port, public_base.rstrip("/")

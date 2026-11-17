@@ -14,7 +14,16 @@ Step actions:
                                         (promo pop-ups); skipped otherwise
   expect    {locator? , url?}           assert we are where we think we are;
                                         anything else stops the run
-  mfa       {detect, input, submit}     if ``detect`` appears, ask the human
+  mfa       {detect, input, submit}     if ``detect`` appears, ask the human;
+            [request, remember]         optional: a "send me a code" button,
+                                        clicked only when someone can answer,
+                                        and a "remember this device" box
+  select    {locator, option | option_secret}
+                                        choose a dropdown option by its visible
+                                        label (``option``), or the one option
+                                        whose label contains a stored value
+                                        (``option_secret``: keeps account
+                                        numbers out of the script)
   download  {locator, save_as}          click and save the download
   balance   {locator, save_as}          save the text of a balance shown on the
                                         page (for portals with no export); the
@@ -29,7 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-ACTIONS = {"goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance"}
+ACTIONS = {"goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance", "select"}
 LOCATOR_KINDS = ("role", "label", "text", "placeholder", "testid", "css")
 
 
@@ -96,6 +105,10 @@ class Step:
     detect: Locator | None = None
     input: Locator | None = None
     submit: Locator | None = None
+    request: Locator | None = None
+    remember: Locator | None = None
+    option: str | None = None
+    option_secret: str | None = None
     timeout_ms: int | None = None
 
     @classmethod
@@ -122,6 +135,10 @@ class Step:
             detect=loc("detect"),
             input=loc("input"),
             submit=loc("submit"),
+            request=loc("request"),
+            remember=loc("remember"),
+            option=data.get("option"),
+            option_secret=data.get("option_secret"),
             timeout_ms=data.get("timeout_ms"),
         )
         step._check()
@@ -138,19 +155,22 @@ class Step:
             "mfa": ["detect", "input", "submit"],
             "download": ["locator", "save_as"],
             "balance": ["locator", "save_as"],
+            "select": ["locator"],
         }[self.action]
         for key in need:
             if getattr(self, key) is None:
                 raise ScriptError(f"{self.action} step '{self.intent}' needs {key}")
+        if self.action == "select" and (self.option is None) == (self.option_secret is None):
+            raise ScriptError(f"select step '{self.intent}' needs exactly one of option or option_secret")
         if self.action == "expect" and self.locator is None and self.url is None:
             raise ScriptError(f"expect step '{self.intent}' needs a locator or url")
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"action": self.action, "intent": self.intent}
-        for key in ("url", "secret", "save_as", "timeout_ms"):
+        for key in ("url", "secret", "save_as", "option", "option_secret", "timeout_ms"):
             if getattr(self, key) is not None:
                 d[key] = getattr(self, key)
-        for key in ("locator", "detect", "input", "submit"):
+        for key in ("locator", "detect", "input", "submit", "request", "remember"):
             if getattr(self, key) is not None:
                 d[key] = getattr(self, key).to_dict()
         return d
@@ -265,7 +285,7 @@ class Script:
             raise ScriptError("goto is only allowed in the login phase; navigate by clicking")
         if any(s.action == "fill" for s in steps):
             raise ScriptError("fill is only allowed in the login phase")
-        if any(s.action in ("download", "balance") for s in login):
+        if any(s.action in ("download", "balance", "select") for s in login):
             raise ScriptError("download and balance steps belong after login")
         script = cls(
             institution=data["institution"],
@@ -298,4 +318,4 @@ class Script:
         return d
 
     def secrets(self) -> set[str]:
-        return {s.secret for s in self.login if s.secret}
+        return {s.secret for s in self.login if s.secret} | {s.option_secret for s in self.steps if s.option_secret}

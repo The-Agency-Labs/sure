@@ -16,6 +16,8 @@ SECRETS = {"fakebank/username": fakebank.USERNAME, "fakebank/password": fakebank
 
 
 class Codes:
+    attended = True
+
     def __init__(self, code=fakebank.MFA_CODE):
         self.code = code
         self.asked = 0
@@ -222,3 +224,66 @@ def test_balance_step_saves_the_shown_balance(tmp_path):
     body = _json.loads(saved.read_text())
     assert body["kind"] == "balance" and body["text"] == "Total balance $1,234.56"
     assert not saved.stat().st_mode & 0o222
+
+
+def _send_code_script(base):
+    data = fakebank.script_dict(base)
+    mfa = next(s for s in data["login"] if s["action"] == "mfa")
+    mfa["request"] = {"role": "button", "name": "Send code"}
+    mfa["remember"] = {"label": "Remember this device"}
+    return data
+
+
+def test_unattended_run_does_not_ask_the_bank_to_send_a_code(tmp_path):
+    with fakebank.FakeBank(send_code=True) as bank:
+        notifier = NullNotifier()
+        base_runner, _ = make_runner(tmp_path, _send_code_script(bank.url))
+        runner = type(base_runner)(base_runner.script, base_runner.config, base_runner.secrets, NoWaitCodes(notifier, "fakebank"), notifier)
+        result = runner.run()
+    assert not result.ok and "MfaNeeded" in result.error
+    assert bank.hits["POST /mfa/send"] == 0  # nothing was sent at 3 a.m.
+
+
+def test_attended_run_requests_the_code_and_ticks_remember(tmp_path):
+    codes = Codes()
+    with fakebank.FakeBank(send_code=True) as bank:
+        runner, _ = make_runner(tmp_path, _send_code_script(bank.url), codes=codes)
+        assert runner.run().ok
+        assert bank.hits["POST /mfa/send"] == 1
+        # "Remember this device" was ticked, so the next run is not asked again.
+        again, _ = make_runner(tmp_path, _send_code_script(bank.url), codes=codes)
+        assert again.run().ok
+    assert codes.asked == 1
+
+
+def _dropdown_script(base):
+    data = fakebank.script_dict(base)
+    data["steps"] = [
+        data["steps"][0],
+        {"action": "click", "intent": "open download transactions", "locator": {"role": "link", "name": "Download page"}},
+        {"action": "select", "intent": "pick the card", "locator": {"label": "Account"}, "option_secret": "fakebank/card"},
+        {"action": "select", "intent": "pick CSV", "locator": {"label": "Format"}, "option": "CSV"},
+        {"action": "download", "intent": "download", "locator": {"role": "button", "name": "Download"}, "save_as": "card__{today}.{ext}"},
+    ]
+    return data
+
+
+def test_select_picks_the_account_by_a_stored_value(tmp_path):
+    secrets = dict(SECRETS, **{"fakebank/card": "9911"})
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, _dropdown_script(bank.url), secrets=secrets)
+        result = runner.run()
+    assert result.ok, result.error
+    assert bank.exports == ["acct=a2&fmt=CSV"]
+    assert result.downloads[0].name.startswith("card__")
+
+
+def test_select_refuses_an_ambiguous_stored_value(tmp_path):
+    secrets = dict(SECRETS, **{"fakebank/card": "991"})  # matches two cards
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, _dropdown_script(bank.url), secrets=secrets)
+        result = runner.run()
+    assert not result.ok and "UnexpectedPage" in result.error
+    assert bank.exports == []
+    bundle = (result.failure_bundle / "bundle.json").read_text()
+    assert "991" not in bundle.replace("#", "")

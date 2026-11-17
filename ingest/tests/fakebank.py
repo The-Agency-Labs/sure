@@ -35,7 +35,25 @@ LOGIN = """<h1>Sign on</h1>
 MFA = """<h1>Verify your identity</h1>
 <form method=post action=/mfa>
 <label>Verification code <input name=code></label>
+<label><input type=checkbox name=remember> Remember this device</label>
 <button>Verify</button></form>"""
+
+# Variant where the bank sends the code only after "Send code" is pressed.
+MFA_SEND = """<h1>Verify your identity</h1>
+<button id=send onclick="fetch('/mfa/send', {method: 'POST'}).then(() => { document.getElementById('f').hidden = false })">Send code</button>
+<form id=f method=post action=/mfa hidden>
+<label>Verification code <input name=code></label>
+<label><input type=checkbox name=remember> Remember this device</label>
+<button>Verify</button></form>"""
+
+DOWNLOAD_PAGE = """<h1>Download transactions</h1>
+<label>Account <select id=acct>
+  <option value="a1">Chequing 4455-1234</option>
+  <option value="a2">Visa ending 9911</option>
+  <option value="a3">Visa ending 9912</option>
+</select></label>
+<label>Format <select id=fmt><option>Quicken</option><option>CSV</option></select></label>
+<button onclick="location.href='/export/transactions.csv?acct=' + acct.value + '&fmt=' + fmt.value">Download</button>"""
 
 ACCOUNTS = """<h1>Accounts</h1>
 <p>Welcome back, {holder}</p>
@@ -44,6 +62,7 @@ ACCOUNTS = """<h1>Accounts</h1>
   <p>Balance ${balance}</p>
   <p data-testid="plan-balance">Total balance ${balance}</p>
   <a href="/accounts/77812/history">Account history</a>
+  <a href="/download">Download page</a>
   <a href="/transfer?from=77812">Transfer funds</a>
   <button onclick="fetch('/api/v2/quick', {{method: 'POST', body: 'amount=500'}}).catch(() => {{}})">Quick action</button>
   <button id=dl onclick="location.href='/export/transactions.csv?acct=77812'">{download_label}</button>
@@ -56,9 +75,11 @@ ACCOUNTS = """<h1>Accounts</h1>
 
 
 class FakeBank:
-    def __init__(self, *, download_label: str = "Download transactions", require_mfa: bool = True):
+    def __init__(self, *, download_label: str = "Download transactions", require_mfa: bool = True, send_code: bool = False):
         self.download_label = download_label
         self.require_mfa = require_mfa
+        self.send_code = send_code
+        self.exports: list[str] = []
         self.hits: Counter[str] = Counter()
         self.beacons: list[dict[str, str]] = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
@@ -111,13 +132,16 @@ class FakeBank:
                 if path == "/login":
                     self._page("Sign on", LOGIN)
                 elif path == "/mfa":
-                    self._page("Verify", MFA)
+                    self._page("Verify", MFA_SEND if bank.send_code else MFA)
+                elif path == "/download":
+                    self._page("Download", DOWNLOAD_PAGE)
                 elif path == "/accounts":
                     self._page(
                         "Accounts",
                         ACCOUNTS.format(holder=HOLDER, balance=BALANCE, download_label=bank.download_label),
                     )
                 elif path == "/export/transactions.csv":
+                    bank.exports.append(urlsplit(self.path).query)
                     data = CSV.encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/csv")
@@ -143,9 +167,12 @@ class FakeBank:
                         self._redirect("/mfa" if bank.require_mfa and not self._trusted() else "/accounts")
                     else:
                         self._page("Sign on", "<h1>Sign on</h1><p role=alert>Incorrect details</p>" + LOGIN)
+                elif path == "/mfa/send":
+                    self._page("ok", "")
                 elif path == "/mfa":
                     if form.get("code") == MFA_CODE:
-                        self._redirect("/accounts", "trusted_device=1; Path=/; Max-Age=31536000; HttpOnly")
+                        trust = "trusted_device=1; Path=/; Max-Age=31536000; HttpOnly"
+                        self._redirect("/accounts", trust if form.get("remember") or not bank.send_code else None)
                     else:
                         self._redirect("/mfa")
                 else:
@@ -159,9 +186,9 @@ def script_dict(base: str) -> dict:
         "institution": "fakebank",
         "currency": "CAD",
         "allowlist": {
-            "navigation": [rf"^{base}/(login|mfa|accounts|export/transactions\.csv)"],
+            "navigation": [rf"^{base}/(login|mfa|accounts|download|export/transactions\.csv)"],
             "hosts": ["127.0.0.1"],
-            "post": [rf"^{base}/(login|mfa)$"],
+            "post": [rf"^{base}/(login|mfa|mfa/send)$"],
         },
         "login": [
             {"action": "goto", "intent": "open the sign-on page", "url": f"{base}/login"},
