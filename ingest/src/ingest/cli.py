@@ -225,7 +225,7 @@ def cmd_pdf_structure(args, cfg) -> int:
 def cmd_record(args, cfg) -> int:
     from .record import record
 
-    return record(args.url, Path(args.output), args.channel)
+    return record(args.url, Path(args.output), args.channel, args.chrome, args.diagnose)
 
 
 def cmd_check(args, cfg) -> int:
@@ -282,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("url")
     s.add_argument("-o", "--output", required=True, help="where the recording goes (use /dev/shm: it holds what you type)")
     s.add_argument("--channel", help="chrome to use installed Google Chrome; default is Playwright's Chromium")
+    s.add_argument("--chrome", help="path to a Google Chrome binary (overrides --channel)")
+    s.add_argument("--diagnose", action="store_true", help="print refused/failed requests (path shape and status only)")
     s.set_defaults(fn=cmd_record, no_config=True)
 
     s = sub.add_parser("check", help="validate a bank script")
