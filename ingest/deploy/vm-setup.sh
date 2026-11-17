@@ -8,7 +8,7 @@ set -euo pipefail
 command -v docker >/dev/null || { echo "install Docker from Docker's apt repo first" >&2; exit 1; }
 
 FINANCE_GID=2000   # group: can read raw files
-SCRAPER_UID=2001   # writes raw/, owns browser profiles + vault credentials
+SCRAPER_UID=2001   # writes raw/, owns browser profiles
 LOADER_UID=2002    # reads raw/, writes normalized/, holds the Sure API key
 REPO=/opt/ingest
 
@@ -35,16 +35,15 @@ install -d -o "$LOADER_UID"  -g finance -m 0750 /srv/finance/normalized
 install -d -o root -g root -m 0700 /srv/finance/sure-backups
 
 echo "== VM-local secrets and state (never on the share, never backed up off the VM)"
-install -d -o "$SCRAPER_UID" -g "$SCRAPER_UID" -m 0700 /srv/ingest-secrets /srv/ingest-secrets/bw /srv/ingest-secrets/profiles
+install -d -o "$SCRAPER_UID" -g "$SCRAPER_UID" -m 0700 /srv/ingest-secrets /srv/ingest-secrets/profiles
 install -d -o "$LOADER_UID"  -g "$LOADER_UID"  -m 0700 /srv/loader-secrets
 install -d -o root -g root -m 0755 /srv/ingest-state
 install -d -o "$SCRAPER_UID" -g "$SCRAPER_UID" -m 0700 /srv/ingest-state/bundles
 install -d -o "$LOADER_UID"  -g finance -m 0750 /srv/ingest-state/review
 install -d -o root -g root -m 0700 /srv/ingest-state/repair-queue
 [ -e /srv/loader-secrets/sure_api_key ] || install -o "$LOADER_UID" -g "$LOADER_UID" -m 0400 /dev/null /srv/loader-secrets/sure_api_key
-for f in bw_server bw_clientid bw_clientsecret bw_password; do
-  [ -e "/srv/ingest-secrets/bw/$f" ] || install -o "$SCRAPER_UID" -g "$SCRAPER_UID" -m 0600 /dev/null "/srv/ingest-secrets/bw/$f"
-done
+# Bank logins, encrypted with this VM's systemd-creds key (deploy/ingest/set-credential.sh).
+install -d -o root -g root -m 0700 /etc/ingest/credentials
 
 echo "== config"
 install -d -o root -g finance -m 0750 /etc/ingest
@@ -84,10 +83,10 @@ cat <<'NEXT'
 Done. Still to do by hand (see ingest/README.md, "Setup"):
   1. Fill /opt/sure/.env (SURE_BIND_ADDR = the tailnet IP above), then: cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup
   2. Create a Sure API key (read_write); write it to /srv/loader-secrets/sure_api_key
-  3. Fill /srv/ingest-secrets/bw/* (dedicated bank-logins vault account)
+  3. Bank logins: deploy/ingest/set-credential.sh <bank> username (and password)
   4. Edit /etc/ingest/ingest.json and /etc/ingest/banks.list
-  5. cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=... --build-arg BW_SHA256=...
+  5. cd /opt/ingest/ingest/deploy/ingest && docker compose build
   6. Repair model on a GPU machine: deploy/repair-host/install-ollama.sh (see README)
-  7. First sign-in per bank by hand: docker compose run --rm scraper scrape <bank> --interactive
+  7. First sign-in per bank by hand: deploy/ingest/scrape.sh <bank> --interactive
   8. systemctl enable --now ingest-nightly.timer
 NEXT

@@ -32,6 +32,7 @@ def paths(cfg: dict) -> dict[str, Path]:
         "review": Path(p.get("review", "/srv/ingest-state/review")),
         "queue": Path(p.get("repair_queue", "/srv/ingest-state/repair-queue")),
         "secrets": Path(p.get("secrets", "/srv/ingest-secrets")),
+        "credentials": Path(p.get("credentials", "/etc/ingest/credentials")),
         "banks": Path(p.get("banks", "/opt/ingest/ingest/banks")),
     }
 
@@ -62,7 +63,7 @@ def notifier(cfg: dict):
 def cmd_scrape(args, cfg) -> int:
     from .notify import MfaServer, NoWaitCodes, TerminalCodes
     from .runner import RunConfig, Runner
-    from .secrets import BitwardenStore
+    from .secrets import DirStore
     from .steps import Script
 
     p = paths(cfg)
@@ -92,7 +93,8 @@ def cmd_scrape(args, cfg) -> int:
         codes = MfaServer(mfa.get("bind", "0.0.0.0"), mfa.get("port", 8765), mfa["public_base"], note)
     else:
         codes = NoWaitCodes(note, script.institution)
-    store = BitwardenStore(p["secrets"] / "bw")
+    # scrape.sh decrypts this bank's logins into RAM and mounts them here.
+    store = DirStore(Path(os.environ.get("INGEST_CREDENTIALS_DIR", "/run/ingest-creds")))
     try:
         result = Runner(script, run_cfg, store, codes, note).run()
     finally:
@@ -141,7 +143,7 @@ def recent_amounts(normalized: Path, days: int = 120) -> list[Decimal]:
 
 
 def sensitive_values(cfg: dict, p: dict[str, Path]) -> list[str]:
-    from .secrets import BitwardenStore
+    from .secrets import SystemdCredsStore
 
     values: list[str] = []
     extra = Path(cfg.get("repair", {}).get("sensitive_file", p["secrets"] / "sensitive.json"))
@@ -149,11 +151,10 @@ def sensitive_values(cfg: dict, p: dict[str, Path]) -> list[str]:
         values += json.loads(extra.read_text()).get("values", [])
     else:
         log.warning("no %s: personal details (name, address, phone, email) are not being checked", extra)
-    store = BitwardenStore(p["secrets"] / "bw")
-    try:
-        values += store.all_values()
-    finally:
-        store.close()
+    if p["credentials"].is_dir():
+        values += SystemdCredsStore(p["credentials"]).all_values()
+    else:
+        log.warning("no %s: bank logins are not being checked", p["credentials"])
     return values
 
 

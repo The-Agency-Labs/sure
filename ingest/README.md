@@ -26,7 +26,7 @@ ingest/
  │                                                                        │
  │  scraper container (scraper_net)          loader container (sure_net)  │
  │  headed Chrome + Xvfb, persistent         parse -> check -> JSONL ->   │
- │  profile per bank, bw at run time         POST /api/v1/transactions    │
+ │  profile per bank, logins in RAM per run  POST /api/v1/transactions    │
  │        │ writes                              │ reads ro      │         │
  │        ▼                                     ▼               ▼         │
  │  /srv/finance/raw/<bank>/<year>/  ──────────►  /srv/finance/normalized │
@@ -34,7 +34,7 @@ ingest/
  │  Sure (web, worker, db, redis, backup) on sure_net ── web on 127.0.0.1 │
  │  behind Tailscale Serve (tailnet-only HTTPS); daily backups            │
  └────────────────────────────────────────────────────────────────────────┘
-   /srv/finance = host ZFS dataset via virtiofs    Bitwarden-compatible vault (bank logins)
+   /srv/finance = host ZFS dataset via virtiofs    /etc/ingest/credentials (encrypted bank logins)
    push (optional, generic text) ◄── failures      Ollama on a GPU machine, tailnet only (repair only)
 ```
 
@@ -43,7 +43,8 @@ ingest/
 | `/opt/sure/` | Sure `compose.yml` + `.env` (600) | root |
 | `/opt/ingest/` | sparse checkout of this repo (`ingest/` only) | root |
 | `/etc/ingest/ingest.json`, `banks.list` | config | root:finance 640 |
-| `/srv/ingest-secrets/` | browser profiles, `bw/` credentials, `sensitive.json`, push token | ingest-scraper 700 |
+| `/etc/ingest/credentials/` | bank logins, `<bank>.<field>.cred`, encrypted with systemd-creds | root 700 |
+| `/srv/ingest-secrets/` | browser profiles, `sensitive.json`, push token | ingest-scraper 700 |
 | `/srv/loader-secrets/sure_api_key` | Sure API key | ingest-loader 400 |
 | `/srv/ingest-state/bundles` | failure bundles | ingest-scraper 700 |
 | `/srv/ingest-state/review` | files that failed a check | ingest-loader |
@@ -90,11 +91,17 @@ via `accounts` in `ingest.json`.
   reach the network, so the guard that matters is the `post` list: any
   state-changing request not on it is aborted. Keep `post` to the exact sign-on
   and export endpoints.
-- **Secrets** come from a dedicated vault account (Bitwarden or Vaultwarden) with only the bank logins,
-  through `bw` with a temporary appdata dir. They're unlocked at run time, go
-  straight into `locator.fill`, and are locked after. They never appear in the
-  container env, CLI args, logs, traces or bundles; error text is redacted against
-  every value used.
+- **Bank logins** are stored on the VM only, one file per value
+  (`/etc/ingest/credentials/<bank>.<field>.cred`, root only), encrypted with the
+  VM's systemd-creds key (and its TPM, if it ever has one). `scrape.sh` decrypts
+  only the bank being scraped into a fresh RAM directory under `/dev/shm`, mounts it
+  read-only into the scraper container, and deletes it when the run ends. Values go
+  straight into `locator.fill`. They never appear in the container env, CLI args,
+  logs, traces or bundles; error text is redacted against every value used. There
+  is no password manager in the loop: the VM would have to hold an unlock key for
+  one anyway, which gives no more protection than this. The limit: whoever has root
+  on the VM, or a full copy of its disk, can decrypt them. Keep the VM's disk on
+  encrypted storage on the host.
 - **No tracing or video, ever.** Screenshots only on failure *after* login. They
   stay in the bundle folder on the VM and are never read by the repair command.
 - **Staying signed in (fewer "new device" flags):** each bank has its own Chrome
@@ -121,8 +128,8 @@ via `accounts` in `ingest.json`.
   renderer processes that can't touch files or the network directly. It has nothing
   to do with bot detection. It matters because, without it, a hostile script on a
   page (a compromised ad or analytics include on a bank page) that exploits the
-  renderer could read everything the scraper UID can, including the vault
-  credentials. Chrome builds the sandbox from user, pid and net namespaces, which
+  renderer could read everything the scraper UID can, including the
+  decrypted logins for that run. Chrome builds the sandbox from user, pid and net namespaces, which
   Docker's default seccomp profile only allows with `CAP_SYS_ADMIN`. So the scraper
   runs with `seccomp=unconfined` and an AppArmor profile (`deploy/ingest/apparmor-ingest-scraper`:
   docker-default plus `userns`). Chrome then applies its own, stricter seccomp-BPF
@@ -139,7 +146,7 @@ of digits becomes `#`, words outside `src/ingest/vocab.txt` (English/French UI
 words) become `‹x›`, and link URLs become path patterns (`/accounts/:id/history`).
 
 Before anything is shown or sent, a **blocking check** runs over the whole prompt
-against usernames and custom fields from the vault, `sensitive.json` (your name,
+against every stored bank login (decrypted with systemd-creds), `sensitive.json` (your name,
 address, phone, email) and every amount from the last 120 days of normalized data.
 Any hit aborts.
 
@@ -183,27 +190,26 @@ Run all VM steps in a root shell.
    `cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup`.
    Create your user and accounts in the UI. Then create an API key with read/write
    scope under Settings and write it to `/srv/loader-secrets/sure_api_key`.
-4. **Vault:** in your vault server, create a dedicated account (or org collection) that
-   holds only the bank logins. Name the items after the bank (`simplii`, `amex`, …).
-   Put the API key client id/secret, the server URL and the master password in
-   `/srv/ingest-secrets/bw/{bw_clientid,bw_clientsecret,bw_server,bw_password}`.
+4. **Bank logins:** for each bank, in an `ssh -t` session on the VM:
+   `/opt/ingest/ingest/deploy/ingest/set-credential.sh simplii username`, then the
+   same with `password` (and any other field the script uses). It asks for the
+   value without echoing it. Run it again to change a value after a password change.
 5. **Config:** edit `/etc/ingest/ingest.json` (push target in `notify`, `accounts`
    mapping). Set `INGEST_LOCALE` and `INGEST_TIMEZONE` in `deploy/ingest/.env`. Copy `deploy/ingest/sensitive.example.json`
    to `/srv/ingest-secrets/sensitive.json` and fill it in. List the banks in
    `/etc/ingest/banks.list`.
-6. **Build:** `cd /opt/ingest/ingest/deploy/ingest && docker compose build --build-arg BW_VERSION=<x> --build-arg BW_SHA256=<sha>`
-   (take both from the Bitwarden CLI release page).
+6. **Build:** `cd /opt/ingest/ingest/deploy/ingest && docker compose build`
 7. **Repair model** on a machine with a GPU: see "Where the model runs" below.
 8. **First sign-in by hand** for each bank, so you can type the code and tick
-   "remember this device": `docker compose run --rm scraper scrape simplii --interactive`,
+   "remember this device": `./scrape.sh simplii --interactive`,
    then `docker compose run --rm loader load`.
 9. `systemctl enable --now ingest-nightly.timer`
-10. **Repair tooling (VM, outside the containers).** It needs git and the vault:
+10. **Repair tooling (VM, outside the containers, as root).** It needs git and
+   systemd-creds (to check prompts against the stored logins):
    ```sh
    apt install python3-venv
    python3 -m venv /opt/ingest-venv && /opt/ingest-venv/bin/pip install /opt/ingest/ingest
    ```
-   Also install the same pinned `bw` binary to `/usr/local/bin` (unzip, `sha256sum -c`).
 
 ### Schedules: nightly or every N days
 
@@ -255,7 +261,7 @@ Don't touch anything else. Then translate the recording into steps:
 | `with page.expect_download(): ….click()` | `{"action": "download", ..., "save_as": "chequing__{today}.{ext}"}` |
 
 Never copy a typed value from codegen into the script. Literal values are rejected;
-use `"secret": "<vault item>/<field>"`.
+use `"secret": "<bank>/<field>"`, stored with `set-credential.sh <bank> <field>`.
 
 Then:
 
@@ -350,7 +356,8 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | virtiofs mount | `findmnt -t virtiofs /srv/finance` | the `finance-data` source |
 | UID passthrough | `su -s /bin/sh ingest-scraper -c 'touch /srv/finance/raw/.t && rm /srv/finance/raw/.t'`, then on the host `ls -ln <dataset mountpoint>` | raw owned by 2001:2000 |
 | secrets not on share | `ls /srv/finance` | only `raw normalized sure-backups` |
-| bw login | `docker compose run --rm --entrypoint python scraper -c "from ingest.secrets import BitwardenStore as B; from pathlib import Path; s=B(Path('/srv/ingest-secrets/bw')); print(len(s.get('simplii/username'))>0); s.close()"` | `True` (never print the value) |
+| logins decrypt | `for f in /etc/ingest/credentials/*.cred; do n=$(basename $f .cred); systemd-creds decrypt --name=$n $f - \| wc -c \| sed "s/^/$n: /"; done` | a non-zero length per file (never print the value) |
+| no plaintext logins left | `ls /dev/shm` after a scrape | no `ingest-creds.*` |
 | Chrome sandbox works in the container | `docker compose run --rm --entrypoint sh scraper -c 'xvfb-run -a google-chrome --headless=new --dump-dom about:blank'` | `<html>…` and no "No usable sandbox" |
 | AppArmor profile loaded | `aa-status \| grep ingest-scraper` | listed in enforce mode |
 | push | trigger a test via the configured `notify` target | push arrives |

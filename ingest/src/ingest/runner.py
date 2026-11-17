@@ -43,7 +43,7 @@ class RunConfig:
     channel: str | None = "chrome"
     # Chrome's own process sandbox (renderer isolation). A security control, not
     # a stealth one: with it off, a hostile page that exploits the renderer can
-    # read everything this UID can, including the vault credentials.
+    # read everything this UID can, including the decrypted bank logins.
     chromium_sandbox: bool = True
     # From the deployment's .env (INGEST_LOCALE, INGEST_TIMEZONE). None = the
     # system's, which in a container is UTC: set them to match where you are.

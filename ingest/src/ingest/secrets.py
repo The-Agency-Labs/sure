@@ -1,26 +1,24 @@
-"""Bank logins from a Bitwarden-compatible vault, via the ``bw`` CLI.
+"""Bank logins, encrypted on the VM with systemd-creds.
 
-Secret names look like ``simplii/password``: the part before the slash is the
-vault item name, the part after is ``username``, ``password``, ``totp`` or a
-custom field name. Values live only in this process's memory for one run: they
-are never put in the container environment, logs, CLI arguments, traces or
-screenshots.
+Secret names in bank scripts look like ``simplii/password``: bank, then field.
+Each one is a file ``<bank>.<field>.cred`` in /etc/ingest/credentials (root
+only), written by deploy/ingest/set-credential.sh and encrypted with this VM's
+credential key. For a scrape, deploy/ingest/scrape.sh decrypts only that bank's
+files into a RAM directory, mounts it read-only into the scraper container as
+``<bank>.<field>`` files, and deletes it when the run ends.
 
-Files under the credentials directory (scraper UID only, mode 600):
-  bw_server         vault server URL
-  bw_clientid       API key client id of the dedicated bank-logins account
-  bw_clientsecret   API key client secret
-  bw_password       master password (needed to unlock after an API-key login)
+Values live only in this process's memory for one run: they are never put in
+the container environment, logs, CLI arguments, traces or screenshots.
 """
 
 from __future__ import annotations
 
-import json
-import os
+import re
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Protocol
+
+NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
 class SecretError(RuntimeError):
@@ -49,93 +47,62 @@ class DictStore:
         self._values.clear()
 
 
-class BitwardenStore:
-    def __init__(self, creds_dir: Path, bw: str = "bw"):
-        self.creds_dir = creds_dir
-        self.bw = bw
-        # bw keeps login state in its appdata dir; a fresh temp dir per run means
-        # nothing survives the run on disk.
-        self._appdata = tempfile.TemporaryDirectory(prefix="bw-")
-        self._session: str | None = None
-        self._items: dict[str, dict] = {}
+def file_name(name: str) -> str:
+    """'simplii/password' -> 'simplii.password'."""
+    bank, _, field = name.partition("/")
+    if not (NAME.fullmatch(bank) and NAME.fullmatch(field)):
+        raise SecretError(f"secret name {name!r} must look like bank/field (lowercase, digits, - and _)")
+    return f"{bank}.{field}"
 
-    def _read(self, name: str) -> str:
-        path = self.creds_dir / name
-        try:
-            return path.read_text().strip()
-        except FileNotFoundError:
-            raise SecretError(f"missing credentials file {path}") from None
 
-    def _run(self, *args: str, extra_env: dict[str, str] | None = None) -> str:
-        env = {
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-            "HOME": self._appdata.name,
-            "BITWARDENCLI_APPDATA_DIR": self._appdata.name,
-            "BW_NOINTERACTION": "true",
-        }
-        if self._session:
-            env["BW_SESSION"] = self._session
-        env.update(extra_env or {})
-        proc = subprocess.run([self.bw, *args], env=env, capture_output=True, text=True, timeout=120)
-        if proc.returncode != 0:
-            # bw's stderr never contains secret values, but keep it short anyway.
-            raise SecretError(f"bw {args[0]} failed: {proc.stderr.strip()[:200]}")
-        return proc.stdout
+class DirStore:
+    """Decrypted ``<bank>.<field>`` files in a RAM directory (inside the scraper container)."""
 
-    def unlock(self) -> None:
-        self._run("config", "server", self._read("bw_server"))
-        self._run(
-            "login",
-            "--apikey",
-            extra_env={"BW_CLIENTID": self._read("bw_clientid"), "BW_CLIENTSECRET": self._read("bw_clientsecret")},
-        )
-        self._session = self._run(
-            "unlock", "--raw", "--passwordfile", str(self.creds_dir / "bw_password")
-        ).strip()
-        if not self._session:
-            raise SecretError("bw unlock returned no session")
-
-    def _item(self, item_name: str) -> dict:
-        if self._session is None:
-            self.unlock()
-        if item_name not in self._items:
-            self._items[item_name] = json.loads(self._run("get", "item", item_name))
-        return self._items[item_name]
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self._cache: dict[str, str] = {}
 
     def get(self, name: str) -> str:
-        item_name, _, field = name.partition("/")
-        if not field:
-            raise SecretError(f"secret name {name!r} must look like item/field")
-        item = self._item(item_name)
-        login = item.get("login") or {}
-        if field in ("username", "password"):
-            value = login.get(field)
-        elif field == "totp":
-            value = self._run("get", "totp", item["id"]).strip()
-        else:
-            value = next((f.get("value") for f in item.get("fields") or [] if f.get("name") == field), None)
-        if not value:
-            raise SecretError(f"secret {name} is empty or missing")
-        return value
-
-    def all_values(self) -> list[str]:
-        """Every username and custom field across the bank items, for the repair blocking check."""
-        if self._session is None:
-            self.unlock()
-        items = json.loads(self._run("list", "items"))
-        values = []
-        for item in items:
-            login = item.get("login") or {}
-            values += [login.get("username") or ""]
-            values += [f.get("value") or "" for f in item.get("fields") or []]
-        return [v for v in values if v]
+        key = file_name(name)
+        if key not in self._cache:
+            try:
+                value = (self.directory / key).read_text()
+            except FileNotFoundError:
+                raise SecretError(f"no credential {name}: add it with set-credential.sh {name.replace('/', ' ')}") from None
+            if not value:
+                raise SecretError(f"credential {name} is empty")
+            self._cache[key] = value
+        return self._cache[key]
 
     def close(self) -> None:
-        self._items.clear()
-        if self._session:
-            try:
-                self._run("lock")
-            except SecretError:
-                pass
-            self._session = None
-        self._appdata.cleanup()
+        self._cache.clear()
+
+
+class SystemdCredsStore:
+    """The encrypted ``*.cred`` files themselves, decrypted with systemd-creds (root
+    on the VM). The repair command uses it to learn which values must never leave."""
+
+    def __init__(self, directory: Path, binary: str = "systemd-creds"):
+        self.directory = directory
+        self.binary = binary
+
+    def _decrypt(self, path: Path) -> str:
+        proc = subprocess.run(
+            [self.binary, "decrypt", f"--name={path.name.removesuffix('.cred')}", str(path), "-"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            raise SecretError(f"could not decrypt {path.name}: {proc.stderr.strip()[:200]}")
+        return proc.stdout
+
+    def get(self, name: str) -> str:
+        path = self.directory / f"{file_name(name)}.cred"
+        if not path.exists():
+            raise SecretError(f"no credential {name}")
+        return self._decrypt(path)
+
+    def all_values(self) -> list[str]:
+        return [v for v in (self._decrypt(p) for p in sorted(self.directory.glob("*.cred"))) if v]
+
+    def close(self) -> None:
+        pass

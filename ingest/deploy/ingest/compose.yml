@@ -1,7 +1,6 @@
 # Scraper and loader jobs. Run with `docker compose run --rm <service> ...`
 # (nightly.sh does this); nothing here stays up.
-#
-# Build: docker compose build --build-arg BW_VERSION=... --build-arg BW_SHA256=...
+# Scrapes go through scrape.sh, which mounts that bank's decrypted logins.
 
 name: ingest
 
@@ -42,6 +41,7 @@ services:
       - /etc/ingest/ingest.json:/etc/ingest/ingest.json:ro
       - ../../banks:/opt/ingest/ingest/banks:ro
       - /srv/ingest-secrets:/srv/ingest-secrets
+      # Bank logins: scrape.sh adds -v <RAM dir>:/run/ingest-creds:ro per run.
       - /srv/ingest-state/bundles:/srv/ingest-state/bundles
       - /srv/finance/raw:/srv/finance/raw
     ports:

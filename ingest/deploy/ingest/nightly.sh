@@ -17,7 +17,7 @@ fi
 status=0
 for bank in $due; do
   echo "== scrape $bank"
-  if docker compose run --rm --no-deps scraper scrape "$bank"; then
+  if ./scrape.sh "$bank"; then
     date +%F > "$STATE/$bank"
   else
     status=1

@@ -7,7 +7,7 @@ add one of a few step types; it can never inject code.
 
 Step actions:
   goto      {url}                       open a page (login phase only)
-  fill      {locator, secret}           type a secret from the vault
+  fill      {locator, secret}           type a stored bank login (set-credential.sh)
   click     {locator}
   wait      {locator}                   wait until visible
   dismiss   {locator}                   click if it shows up within a few seconds
@@ -107,7 +107,7 @@ class Step:
         if not intent or not isinstance(intent, str):
             raise ScriptError(f"{action} step needs an intent")
         if "value" in data:
-            raise ScriptError("literal values are not allowed; use a vault secret")
+            raise ScriptError("literal values are not allowed; use \"secret\": \"<bank>/<field>\"")
 
         def loc(key):
             return Locator.parse(data[key]) if key in data else None
