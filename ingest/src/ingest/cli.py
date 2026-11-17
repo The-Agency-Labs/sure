@@ -216,6 +216,12 @@ def cmd_clean_recording(args, cfg) -> int:
     return main_clean(Path(args.recording), args.keep or [], Path(args.check) if args.check else None)
 
 
+def cmd_pdf_structure(args, cfg) -> int:
+    from .pdf_structure import main_structure
+
+    return main_structure(Path(args.pdf), args.keep or [], Path(args.check) if args.check else None)
+
+
 def cmd_check(args, cfg) -> int:
     from .steps import Script
 
@@ -259,6 +265,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--keep", nargs="*", help="extra words you are happy to share (e.g. the bank's brand)")
     s.add_argument("--check", help='JSON {"values": [...]}: refuse to print if any of them remain')
     s.set_defaults(fn=cmd_clean_recording, no_config=True)
+
+    s = sub.add_parser("pdf-structure", help="show a statement PDF's layout with every value masked")
+    s.add_argument("pdf")
+    s.add_argument("--keep", nargs="*", help="extra words you are happy to share")
+    s.add_argument("--check", help='JSON {"values": [...]}: refuse to print if any of them remain')
+    s.set_defaults(fn=cmd_pdf_structure, no_config=True)
 
     s = sub.add_parser("check", help="validate a bank script")
     s.add_argument("script")
