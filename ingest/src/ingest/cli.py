@@ -23,23 +23,46 @@ def load_config(path: str | None) -> dict:
     return json.loads(Path(path).read_text())
 
 
-def paths(cfg: dict) -> dict[str, Path]:
-    p = cfg.get("paths", {})
-    return {
-        "raw": Path(p.get("raw", "/srv/finance/raw")),
-        "normalized": Path(p.get("normalized", "/srv/finance/normalized")),
-        "bundles": Path(p.get("bundles", "/srv/ingest-state/bundles")),
-        "review": Path(p.get("review", "/srv/ingest-state/review")),
-        "queue": Path(p.get("repair_queue", "/srv/ingest-state/repair-queue")),
-        "secrets": Path(p.get("secrets", "/srv/ingest-secrets")),
-        "credentials": Path(p.get("credentials", "/etc/ingest/credentials")),
-        "banks": Path(p.get("banks", "/opt/ingest/ingest/banks")),
-    }
+# Config paths may use ${VARS}: the containers set them to their own mount
+# points, deploy/ingest/env.sh to the stack's folders on the VM.
+PATH_DEFAULTS = {
+    "raw": "${FINANCE_DIR}/raw",
+    "normalized": "${FINANCE_DIR}/normalized",
+    "bundles": "${STATE_DIR}/bundles",
+    "review": "${STATE_DIR}/review",
+    "queue": "${STATE_DIR}/repair-queue",
+    "secrets": "${SECRETS_DIR}",
+    "credentials": "${CREDENTIALS_DIR}",
+    "banks": "${BANKS_DIR}",
+}
+CONFIG_KEYS = {"queue": "repair_queue"}
+
+
+def expand(value: str) -> Path:
+    out = os.path.expandvars(value)
+    if "$" in out:
+        raise SystemExit(f"path {value!r} uses a variable that isn't set (run host tools through deploy/ingest/ingest.sh)")
+    return Path(out)
+
+
+class Paths:
+    """Config paths, each expanded only when used (a container has no credentials dir)."""
+
+    def __init__(self, cfg: dict):
+        self._raw = cfg.get("paths", {})
+
+    def __getitem__(self, key: str) -> Path:
+        return expand(self._raw.get(CONFIG_KEYS.get(key, key), PATH_DEFAULTS[key]))
+
+
+def paths(cfg: dict) -> Paths:
+    return Paths(cfg)
 
 
 def read_secret_file(path: str | None) -> str | None:
     if not path:
         return None
+    path = str(expand(path))
     try:
         return Path(path).read_text().strip() or None
     except FileNotFoundError:
@@ -142,11 +165,11 @@ def recent_amounts(normalized: Path, days: int = 120) -> list[Decimal]:
     return sorted(out)
 
 
-def sensitive_values(cfg: dict, p: dict[str, Path]) -> list[str]:
+def sensitive_values(cfg: dict, p: Paths) -> list[str]:
     from .secrets import SystemdCredsStore
 
     values: list[str] = []
-    extra = Path(cfg.get("repair", {}).get("sensitive_file", p["secrets"] / "sensitive.json"))
+    extra = expand(str(cfg.get("repair", {}).get("sensitive_file", p["secrets"] / "sensitive.json")))
     if extra.exists():
         values += json.loads(extra.read_text()).get("values", [])
     else:
@@ -201,8 +224,10 @@ def cmd_due(args, cfg) -> int:
     from .schedule import ScheduleError, due_banks
 
     today = dt.date.fromisoformat(args.today) if args.today else dt.date.today()
+    banks_list = Path(args.list) if args.list else expand("${STACK_DIR}/config/banks.list")
+    state = Path(args.state) if args.state else expand("${STATE_DIR}/last-success")
     try:
-        banks = due_banks(Path(args.list).read_text(), Path(args.state), today)
+        banks = due_banks(banks_list.read_text(), state, today)
     except ScheduleError as exc:
         print(f"banks list: {exc}", file=sys.stderr)
         return 2
@@ -261,8 +286,8 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_repair)
 
     s = sub.add_parser("due", help="print the banks due tonight, from banks.list and the last successful runs")
-    s.add_argument("--list", default="/etc/ingest/banks.list")
-    s.add_argument("--state", default="/var/lib/ingest/last-success")
+    s.add_argument("--list", help="default: $STACK_DIR/config/banks.list")
+    s.add_argument("--state", help="default: $STATE_DIR/last-success")
     s.add_argument("--today", help="YYYY-MM-DD, for checking a schedule")
     s.set_defaults(fn=cmd_due, no_config=True)
 

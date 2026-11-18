@@ -29,31 +29,38 @@ ingest/
  │  profile per bank, logins in RAM per run  POST /api/v1/transactions    │
  │        │ writes                              │ reads ro      │         │
  │        ▼                                     ▼               ▼         │
- │  /srv/finance/raw/<bank>/<year>/  ──────────►  /srv/finance/normalized │
+ │  ~/mnt/finance/raw/<bank>/<year>/ ────────► ~/mnt/finance/normalized   │
  │                                                                        │
  │  Sure (web, worker, db, redis, backup) on sure_net ── web on 127.0.0.1 │
  │  behind Tailscale Serve (tailnet-only HTTPS); daily backups            │
  └────────────────────────────────────────────────────────────────────────┘
-   /srv/finance = host ZFS dataset via virtiofs    /etc/ingest/credentials (encrypted bank logins)
+   ~/mnt/finance = host ZFS dataset via virtiofs    ~/sure/config/credentials (encrypted bank logins)
    push (optional, generic text) ◄── failures      Ollama on a GPU machine, tailnet only (repair only)
 ```
 
+Everything for this stack lives under `~/sure` (root's home, `STACK_DIR`), and the
+host's finance share is mounted at `~/mnt/finance` (`FINANCE_DIR`). Both are set in
+`deploy/ingest/.env`; `deploy/ingest/env.sh` describes the layout, and every deploy
+script reads it. Host-side commands go through `deploy/ingest/ingest.sh`.
+
 | Path on the VM | What | Owner |
 |---|---|---|
-| `/opt/sure/` | Sure `compose.yml` + `.env` (600) | root |
-| `/opt/ingest/` | sparse checkout of this repo (`ingest/` only) | root |
-| `/etc/ingest/ingest.json`, `banks.list` | config | root:finance 640 |
-| `/etc/ingest/credentials/` | bank logins, `<bank>.<field>.cred`, encrypted with systemd-creds | root 700 |
-| `/srv/ingest-secrets/` | browser profiles, `sensitive.json`, push token | ingest-scraper 700 |
-| `/srv/loader-secrets/sure_api_key` | Sure API key | ingest-loader 400 |
-| `/srv/ingest-state/bundles` | failure bundles | ingest-scraper 700 |
-| `/srv/ingest-state/review` | files that failed a check | ingest-loader |
-| `/srv/ingest-state/repair-queue` | repairs waiting for the model | root 700 |
-| `/srv/finance/raw/<bank>/<year>/` | original downloads, mode 444, never changed | ingest-scraper:finance 2750 |
-| `/srv/finance/normalized/` | canonical JSONL + `.ledger.json` | ingest-loader |
-| `/srv/finance/sure-backups/` | Sure's backup output | root |
+| `~/sure/` | Sure `compose.yml` + `.env` (600) | root 700 |
+| `~/sure/repo/` | sparse checkout of this repo (`ingest/` only) | root |
+| `~/sure/venv/` | host tools (`repair`, `due`), run via `ingest.sh` | root |
+| `~/sure/config/ingest.json`, `banks.list` | config | root:finance 640 |
+| `~/sure/config/credentials/` | bank logins, `<bank>.<field>.cred`, encrypted with systemd-creds | root 700 |
+| `~/sure/secrets/scraper/` | browser profiles, `sensitive.json`, push token | ingest-scraper 700 |
+| `~/sure/secrets/loader/sure_api_key` | Sure API key | ingest-loader 400 |
+| `~/sure/state/bundles` | failure bundles | ingest-scraper 700 |
+| `~/sure/state/review` | files that failed a check | ingest-loader |
+| `~/sure/state/repair-queue` | repairs waiting for the model | root 700 |
+| `~/sure/state/last-success/` | date of each bank's last good scrape (schedules) | root 700 |
+| `~/mnt/finance/raw/<bank>/<year>/` | original downloads, mode 444, never changed | ingest-scraper:finance 2750 |
+| `~/mnt/finance/normalized/` | canonical JSONL + `.ledger.json` | ingest-loader |
+| `~/mnt/finance/sure-backups/` | Sure's backup output | root |
 
-Nothing under `/srv/ingest-secrets`, `/srv/loader-secrets` or `/srv/ingest-state` is on the share, and none of it is backed up off the VM.
+Nothing under `~/sure/secrets/scraper`, `~/sure/secrets/loader` or `~/sure/state` is on the share, and none of it is backed up off the VM.
 
 ### Canonical record
 
@@ -92,7 +99,7 @@ via `accounts` in `ingest.json`.
   state-changing request not on it is aborted. Keep `post` to the exact sign-on
   and export endpoints.
 - **Bank logins** are stored on the VM only, one file per value
-  (`/etc/ingest/credentials/<bank>.<field>.cred`, root only), encrypted with the
+  (`~/sure/config/credentials/<bank>.<field>.cred`, root only), encrypted with the
   VM's systemd-creds key (and its TPM, if it ever has one). `scrape.sh` decrypts
   only the bank being scraped into a fresh RAM directory under `/dev/shm`, mounts it
   read-only into the scraper container, and deletes it when the run ends. Values go
@@ -105,7 +112,7 @@ via `accounts` in `ingest.json`.
 - **No tracing or video, ever.** Screenshots only on failure *after* login. They
   stay in the bundle folder on the VM and are never read by the repair command.
 - **Staying signed in (fewer "new device" flags):** each bank has its own Chrome
-  profile under `/srv/ingest-secrets/profiles/<bank>`, kept between runs. Cookies,
+  profile under `~/sure/secrets/scraper/profiles/<bank>`, kept between runs. Cookies,
   local storage and the bank's "remember this device" token survive, so night after
   night the bank sees the same browser. The first sign-in is done by hand
   (`scrape <bank> --interactive`, where you type the code in the terminal). After
@@ -171,15 +178,15 @@ Run all VM steps in a root shell.
    `deploy/host/host-finance-perms.sh <pool>/finance`
 2. **Checkout on the VM:**
    ```sh
-   git clone --filter=blob:none --sparse https://github.com/The-Agency-Labs/sure /opt/ingest
-   git -C /opt/ingest sparse-checkout set ingest
-   /opt/ingest/ingest/deploy/vm-setup.sh
+   git clone --filter=blob:none --sparse https://github.com/The-Agency-Labs/sure ~/sure/repo
+   git -C ~/sure/repo sparse-checkout set ingest
+   ~/sure/repo/ingest/deploy/vm-setup.sh
    ```
    This creates the users (`finance` 2000, `ingest-scraper` 2001, `ingest-loader` 2002),
-   the directories and permissions in the table above, the `/srv/finance` fstab
+   the directories and permissions in the table above, the `~/mnt/finance` fstab
    entry, the `sure_net` and `scraper_net` networks, the systemd timer, and starter
    copies of the configs.
-3. **Sure:** fill `/opt/sure/.env`: `SECRET_KEY_BASE`, `POSTGRES_PASSWORD`,
+3. **Sure:** fill `~/sure/.env`: `SECRET_KEY_BASE`, `POSTGRES_PASSWORD`,
    `SURE_BIND_ADDR=127.0.0.1`, `APP_DOMAIN=<vm>.<tailnet>.ts.net`, `RAILS_ASSUME_SSL=true`.
    Then put Tailscale Serve in front. It needs MagicDNS and HTTPS certificates on in
    the tailnet; the setting persists across reboots:
@@ -187,18 +194,18 @@ Run all VM steps in a root shell.
    Sure is then reachable only at `https://<vm>.<tailnet>.ts.net`, from tailnet
    devices. (Binding the tailnet IP directly also works; `vm-setup.sh` makes Docker
    wait for Tailscale at boot for that case.) Then
-   `cd /opt/sure && docker compose up -d && docker compose --profile backup up -d backup`.
+   `cd ~/sure && docker compose up -d && docker compose --profile backup up -d backup`.
    Create your user and accounts in the UI. Then create an API key with read/write
-   scope under Settings and write it to `/srv/loader-secrets/sure_api_key`.
+   scope under Settings and write it to `~/sure/secrets/loader/sure_api_key`.
 4. **Bank logins:** for each bank, in an `ssh -t` session on the VM:
-   `/opt/ingest/ingest/deploy/ingest/set-credential.sh simplii username`, then the
+   `~/sure/repo/ingest/deploy/ingest/set-credential.sh simplii username`, then the
    same with `password` (and any other field the script uses). It asks for the
    value without echoing it. Run it again to change a value after a password change.
-5. **Config:** edit `/etc/ingest/ingest.json` (push target in `notify`, `accounts`
+5. **Config:** edit `~/sure/config/ingest.json` (push target in `notify`, `accounts`
    mapping). Set `INGEST_LOCALE` and `INGEST_TIMEZONE` in `deploy/ingest/.env`. Copy `deploy/ingest/sensitive.example.json`
-   to `/srv/ingest-secrets/sensitive.json` and fill it in. List the banks in
-   `/etc/ingest/banks.list`.
-6. **Build:** `cd /opt/ingest/ingest/deploy/ingest && docker compose build`
+   to `~/sure/secrets/scraper/sensitive.json` and fill it in. List the banks in
+   `~/sure/config/banks.list`.
+6. **Build:** `cd ~/sure/repo/ingest/deploy/ingest && docker compose build`
 7. **Repair model** on a machine with a GPU: see "Where the model runs" below.
 8. **First sign-in by hand** for each bank, so you can type the code and tick
    "remember this device": `./scrape.sh simplii --interactive`,
@@ -208,12 +215,12 @@ Run all VM steps in a root shell.
    systemd-creds (to check prompts against the stored logins):
    ```sh
    apt install python3-venv
-   python3 -m venv /opt/ingest-venv && /opt/ingest-venv/bin/pip install /opt/ingest/ingest
+   python3 -m venv ~/sure/venv && ~/sure/venv/bin/pip install ~/sure/repo/ingest
    ```
 
 ### Schedules: nightly or every N days
 
-`/etc/ingest/banks.list` holds one bank per line, scraped in that order. The timer
+`~/sure/config/banks.list` holds one bank per line, scraped in that order. The timer
 fires every night, and `ingest due` decides which banks run:
 
 ```
@@ -224,8 +231,8 @@ sunlife  every=14d anchor=YYYY-MM-DD offset=2d   # every second payday, two days
 `anchor` is any one payday and `offset` gives contributions time to post. A bank is
 due when its latest scheduled day has no successful run on or after it, so a missed
 run (VM off, a code request) catches up the next night. Success dates live in
-`/var/lib/ingest/last-success/`. To check a schedule:
-`/opt/ingest-venv/bin/ingest due --today 2026-12-01`.
+`~/sure/state/last-success/`. To check a schedule:
+`~/sure/repo/ingest/deploy/ingest/ingest.sh due --today 2026-12-01`.
 
 ### Pension and other balance-only accounts
 
@@ -279,11 +286,11 @@ Repeat for the other banks. If a bank's CSV isn't Simplii's shape, add a
 
 ## When a script breaks: repair
 
-A failed step leaves `/srv/ingest-state/bundles/<bank>-<time>/bundle.json` (plus
+A failed step leaves `~/sure/state/bundles/<bank>-<time>/bundle.json` (plus
 `screenshot.local.png` if it failed after login, for your eyes only). On the VM, as root:
 
 ```sh
-/opt/ingest-venv/bin/ingest repair /srv/ingest-state/bundles/simplii-20261117T033012
+~/sure/repo/ingest/deploy/ingest/ingest.sh repair ~/sure/state/bundles/simplii-20261117T033012
 ```
 
 1. The blocking check runs. If anything sensitive is found, nothing is shown or sent.
@@ -294,7 +301,7 @@ A failed step leaves `/srv/ingest-state/bundles/<bank>-<time>/bundle.json` (plus
 4. Push the commit and re-run the bank by hand.
 
 If the endpoint is offline, the bundle (without the screenshot) is queued and you
-get a push. Run `/opt/ingest-venv/bin/ingest repair --queue` later.
+get a push. Run `~/sure/repo/ingest/deploy/ingest/ingest.sh repair --queue` later.
 
 **Where the model runs.** On a machine with a GPU, reached over the tailnet;
 `qwen2.5:7b-instruct-q4_K_M` fits in 6 GB of VRAM and answers in seconds. If that
@@ -316,7 +323,7 @@ Pascal need), runs it as a dedicated user under a hardened systemd unit that wai
 for Tailscale, listens on the tailnet IP only, unloads the model after every answer,
 and adds ufw rules so only the VM reaches port 11434. Also restrict it in your
 Tailscale ACL (finance VM → GPU machine:11434 only) so the rule doesn't depend on
-one firewall. Then set `repair.url` in `/etc/ingest/ingest.json` on the VM.
+one firewall. Then set `repair.url` in `~/sure/config/ingest.json` on the VM.
 
 ## Tests
 
@@ -353,10 +360,10 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 
 | What | Command (VM, root unless noted) | Expect |
 |---|---|---|
-| virtiofs mount | `findmnt -t virtiofs /srv/finance` | the `finance-data` source |
-| UID passthrough | `su -s /bin/sh ingest-scraper -c 'touch /srv/finance/raw/.t && rm /srv/finance/raw/.t'`, then on the host `ls -ln <dataset mountpoint>` | raw owned by 2001:2000 |
-| secrets not on share | `ls /srv/finance` | only `raw normalized sure-backups` |
-| logins decrypt | `for f in /etc/ingest/credentials/*.cred; do n=$(basename $f .cred); systemd-creds decrypt --name=$n $f - \| wc -c \| sed "s/^/$n: /"; done` | a non-zero length per file (never print the value) |
+| virtiofs mount | `findmnt -t virtiofs ~/mnt/finance` | the `finance-data` source |
+| UID passthrough | `cd ~/sure/repo/ingest/deploy/ingest && docker compose run --rm --no-deps --entrypoint sh scraper -c 'touch /srv/finance/raw/.t && rm /srv/finance/raw/.t'`, then on the host `ls -ln <dataset mountpoint>` | raw owned by 2001:2000 |
+| secrets not on share | `ls ~/mnt/finance` | only `raw normalized sure-backups` |
+| logins decrypt | `for f in ~/sure/config/credentials/*.cred; do n=$(basename $f .cred); systemd-creds decrypt --name=$n $f - \| wc -c \| sed "s/^/$n: /"; done` | a non-zero length per file (never print the value) |
 | no plaintext logins left | `ls /dev/shm` after a scrape | no `ingest-creds.*` |
 | Chrome sandbox works in the container | `docker compose run --rm --entrypoint sh scraper -c 'xvfb-run -a google-chrome --headless=new --dump-dom about:blank'` | `<html>…` and no "No usable sandbox" |
 | AppArmor profile loaded | `aa-status \| grep ingest-scraper` | listed in enforce mode |
@@ -365,14 +372,14 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | Serve in front | `tailscale serve status` | `https://<vm>.<tailnet>.ts.net (tailnet only)` → `127.0.0.1:3000` |
 | Sure on the tailnet over HTTPS | `curl -s -o /dev/null -w "%{http_code}" https://<vm>.<tailnet>.ts.net/up` from a tailnet device | `200` |
 | Sure not on the LAN | `curl -m 3 http://<VM LAN IP>:3000` from another LAN machine | timeout/refused |
-| Sure comes back after reboot | `reboot`, then `docker compose -f /opt/sure/compose.yml ps` | `web` running |
+| Sure comes back after reboot | `reboot`, then `docker compose -f ~/sure/compose.yml ps` | `web` running |
 | scraper can't reach Sure | `docker compose run --rm --entrypoint python scraper -c "import socket; socket.create_connection(('web',3000),3)"` | fails (name not resolved) |
 | Ollama reachable from the VM | `curl -s http://<GPU machine tailnet IP>:11434/api/tags` on the VM | JSON list with the model |
 | Ollama not reachable from elsewhere | the same from any other device | timeout/refused |
 | Ollama uses the GPU | `journalctl -u ollama \| grep "inference compute"` on the GPU machine | `library=CUDA`, not `cpu` |
 | Ollama structured output | `curl -s http://<GPU machine tailnet IP>:11434/api/chat -d '{"model":"<m>","stream":false,"keep_alive":0,"format":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]},"messages":[{"role":"user","content":"say ok"}]}'` | `{"ok":true}` in `message.content` |
 | timer | `systemctl list-timers ingest-nightly.timer` | next run ~03:30 |
-| backups | `ls /srv/finance/sure-backups/*/` after 09:00 UTC | `*-scheduled` folders |
+| backups | `ls ~/mnt/finance/sure-backups/*/` after 09:00 UTC | `*-scheduled` folders |
 
 ## Still unverified
 

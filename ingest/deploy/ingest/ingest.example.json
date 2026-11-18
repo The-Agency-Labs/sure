@@ -1,12 +1,13 @@
 {
   "paths": {
-    "raw": "/srv/finance/raw",
-    "normalized": "/srv/finance/normalized",
-    "secrets": "/srv/ingest-secrets",
-    "banks": "/opt/ingest/ingest/banks",
-    "bundles": "/srv/ingest-state/bundles",
-    "review": "/srv/ingest-state/review",
-    "repair_queue": "/srv/ingest-state/repair-queue"
+    "_comment": "Variables are set inside the containers (compose.yml) and on the VM by env.sh",
+    "raw": "${FINANCE_DIR}/raw",
+    "normalized": "${FINANCE_DIR}/normalized",
+    "secrets": "${SECRETS_DIR}",
+    "banks": "${BANKS_DIR}",
+    "bundles": "${STATE_DIR}/bundles",
+    "review": "${STATE_DIR}/review",
+    "repair_queue": "${STATE_DIR}/repair-queue"
   },
   "browser": {
     "channel": "chrome",
@@ -23,15 +24,15 @@
   "notify": {
     "type": "none",
     "_examples": [
-      {"type": "webhook", "url": "http://PUSH_SERVICE/api/notify", "token_file": "/srv/ingest-secrets/notify_token"},
-      {"type": "ntfy", "url": "http://NTFY_HOST", "topic": "finance-sync", "token_file": "/srv/ingest-secrets/notify_token"}
+      {"type": "webhook", "url": "http://PUSH_SERVICE/api/notify", "token_file": "${SECRETS_DIR}/notify_token"},
+      {"type": "ntfy", "url": "http://NTFY_HOST", "topic": "finance-sync", "token_file": "${SECRETS_DIR}/notify_token"}
     ]
   },
   "sure": {"url": "http://web:3000", "api_key_file": "/run/secrets/sure_api_key"},
   "repair": {
     "url": "http://REPAIR_HOST_TAILNET_IP:11434",
     "model": "qwen2.5:7b-instruct-q4_K_M",
-    "sensitive_file": "/srv/ingest-secrets/sensitive.json"
+    "sensitive_file": "${SECRETS_DIR}/sensitive.json"
   },
   "accounts": {
     "_format": "\"<institution>:<account_ref from the raw file name>\": \"<account name in Sure>\"",

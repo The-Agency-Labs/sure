@@ -1,7 +1,7 @@
 """Bank logins, encrypted on the VM with systemd-creds.
 
 Secret names in bank scripts look like ``simplii/password``: bank, then field.
-Each one is a file ``<bank>.<field>.cred`` in /etc/ingest/credentials (root
+Each one is a file ``<bank>.<field>.cred`` in $STACK_DIR/config/credentials (root
 only), written by deploy/ingest/set-credential.sh and encrypted with this VM's
 credential key. For a scrape, deploy/ingest/scrape.sh decrypts only that bank's
 files into a RAM directory, mounts it read-only into the scraper container as

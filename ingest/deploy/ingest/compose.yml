@@ -10,8 +10,13 @@ x-hardening: &hardening
   security_opt: ["no-new-privileges:true"]
   tmpfs:
     - /tmp:size=512m,mode=1777
-  environment:
+  environment: &paths_inside
+    # Mount points inside the containers; ingest.json paths use these names.
     INGEST_CONFIG: /etc/ingest/ingest.json
+    FINANCE_DIR: /srv/finance
+    STATE_DIR: /srv/ingest-state
+    SECRETS_DIR: /srv/ingest-secrets
+    BANKS_DIR: /opt/ingest/ingest/banks
 
 services:
   scraper:
@@ -33,17 +38,17 @@ services:
     mem_limit: 2g
     pids_limit: 512
     environment:
-      INGEST_CONFIG: /etc/ingest/ingest.json
+      <<: *paths_inside
       HOME: /tmp/home
       INGEST_LOCALE: ${INGEST_LOCALE:?set INGEST_LOCALE in deploy/ingest/.env}
       INGEST_TIMEZONE: ${INGEST_TIMEZONE:?set INGEST_TIMEZONE in deploy/ingest/.env}
     volumes:
-      - /etc/ingest/ingest.json:/etc/ingest/ingest.json:ro
+      - ${STACK_DIR:?set STACK_DIR in .env}/config/ingest.json:/etc/ingest/ingest.json:ro
       - ../../banks:/opt/ingest/ingest/banks:ro
-      - /srv/ingest-secrets:/srv/ingest-secrets
+      - ${STACK_DIR}/secrets/scraper:/srv/ingest-secrets
       # Bank logins: scrape.sh adds -v <RAM dir>:/run/ingest-creds:ro per run.
-      - /srv/ingest-state/bundles:/srv/ingest-state/bundles
-      - /srv/finance/raw:/srv/finance/raw
+      - ${STACK_DIR}/state/bundles:/srv/ingest-state/bundles
+      - ${FINANCE_DIR:?set FINANCE_DIR in .env}/raw:/srv/finance/raw
     ports:
       # Only used when mfa.unattended is "form". Bind to a LAN/tailnet address only.
       - "${MFA_BIND:-127.0.0.1}:8765:8765"
@@ -58,11 +63,11 @@ services:
     mem_limit: 512m
     pids_limit: 128
     volumes:
-      - /etc/ingest/ingest.json:/etc/ingest/ingest.json:ro
-      - /srv/loader-secrets/sure_api_key:/run/secrets/sure_api_key:ro
-      - /srv/finance/raw:/srv/finance/raw:ro
-      - /srv/finance/normalized:/srv/finance/normalized
-      - /srv/ingest-state/review:/srv/ingest-state/review
+      - ${STACK_DIR:?set STACK_DIR in .env}/config/ingest.json:/etc/ingest/ingest.json:ro
+      - ${STACK_DIR}/secrets/loader/sure_api_key:/run/secrets/sure_api_key:ro
+      - ${FINANCE_DIR:?set FINANCE_DIR in .env}/raw:/srv/finance/raw:ro
+      - ${FINANCE_DIR}/normalized:/srv/finance/normalized
+      - ${STACK_DIR}/state/review:/srv/ingest-state/review
     networks: [sure_net]
 
 networks:

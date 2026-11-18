@@ -10,7 +10,8 @@ re='^[a-z0-9][a-z0-9_-]*$'
 [[ $BANK =~ $re && $FIELD =~ $re ]] || { echo "names: lowercase letters, digits, - and _" >&2; exit 2; }
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 [ -t 0 ] || { echo "needs a terminal to type into: run it in an ssh -t session" >&2; exit 1; }
-CREDS=${INGEST_CREDENTIALS:-/etc/ingest/credentials}
+. "$(dirname "$0")/env.sh"
+CREDS=$CREDENTIALS_DIR
 install -d -m 0700 "$CREDS"
 
 read -rsp "$BANK/$FIELD: " value; echo

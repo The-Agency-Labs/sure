@@ -1,5 +1,5 @@
 {
-  "_comment": "Personal details the repair command refuses to send. Copy to /srv/ingest-secrets/sensitive.json (mode 600). Stored bank logins (/etc/ingest/credentials) are added automatically; recent amounts come from normalized/.",
+  "_comment": "Personal details the repair command refuses to send. Copy to $STACK_DIR/secrets/scraper/sensitive.json (mode 600). Stored bank logins ($STACK_DIR/config/credentials) are added automatically; recent amounts come from normalized/.",
   "values": [
     "Your Full Name",
     "123 Your Street",

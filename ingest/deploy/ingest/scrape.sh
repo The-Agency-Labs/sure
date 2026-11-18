@@ -1,16 +1,17 @@
 #!/bin/bash
 # Scrape one bank with that bank's logins decrypted into RAM for this run only.
 #   scrape.sh <bank> [--interactive]
-# Decrypts /etc/ingest/credentials/<bank>.*.cred (systemd-creds) into a fresh
+# Decrypts $STACK_DIR/config/credentials/<bank>.*.cred (systemd-creds) into a fresh
 # directory under /dev/shm, mounts it read-only into the scraper container, and
 # deletes it when the run ends, however it ends.
 set -euo pipefail
 BANK=${1:?usage: scrape.sh <bank> [--interactive]}; shift
 [[ $BANK =~ ^[a-z0-9][a-z0-9_-]*$ ]] || { echo "bad bank name: $BANK" >&2; exit 2; }
 [ "$(id -u)" -eq 0 ] || { echo "run as root (decrypting needs the VM's credential key)" >&2; exit 1; }
-CREDS=${INGEST_CREDENTIALS:-/etc/ingest/credentials}
-SCRAPER_UID=${SCRAPER_UID:-2001}
 cd "$(dirname "$0")"
+. ./env.sh
+CREDS=$CREDENTIALS_DIR
+SCRAPER_UID=${SCRAPER_UID:-2001}
 
 shopt -s nullglob
 files=("$CREDS/$BANK".*.cred)
