@@ -1,0 +1,55 @@
+{
+  "paths": {
+    "_comment": "Variables are set inside the containers (compose.yml) and on the VM by env.sh",
+    "raw": "${FINANCE_DIR}/raw",
+    "normalized": "${FINANCE_DIR}/normalized",
+    "secrets": "${SECRETS_DIR}",
+    "banks": "${BANKS_DIR}",
+    "bundles": "${STATE_DIR}/bundles",
+    "review": "${STATE_DIR}/review",
+    "repair_queue": "${STATE_DIR}/repair-queue"
+  },
+  "browser": {
+    "channel": "chrome",
+    "headless": false,
+    "chromium_sandbox": true
+  },
+  "mfa": {
+    "unattended": "stop",
+    "bind": "0.0.0.0",
+    "port": 8765,
+    "public_base": "http://FINANCE_VM_TAILNET_NAME:8765",
+    "timeout_s": 300
+  },
+  "notify": {
+    "type": "none",
+    "_examples": [
+      {"type": "webhook", "url": "http://PUSH_SERVICE/api/notify", "token_file": "${SECRETS_DIR}/notify_token"},
+      {"type": "ntfy", "url": "http://NTFY_HOST", "topic": "finance-sync", "token_file": "${SECRETS_DIR}/notify_token"}
+    ]
+  },
+  "sure": {"url": "http://web:3000", "api_key_file": "/run/secrets/sure_api_key"},
+  "repair": {
+    "url": "http://REPAIR_HOST_TAILNET_IP:11434",
+    "model": "qwen2.5:7b-instruct-q4_K_M",
+    "sensitive_file": "${SECRETS_DIR}/sensitive.json"
+  },
+  "accounts": {
+    "_format": "\"<institution>:<account_ref from the raw file name>\": \"<account name in Sure>\"",
+    "simplii:<account label, lower case with dashes>": "Everyday Chequing",
+    "sunlife:pension": "Workplace Pension"
+  },
+  "formats": {
+    "simplii": {"parser": "simplii"},
+    "sunlife": {"parser": {"json": "captured_balance", "pdf": "sunlife_pdf"}},
+    "amex": {
+      "parser": "mapped_csv",
+      "_unverified": "Amex Canada CSV: column names are a guess (one Amount column, charges positive). Fix from a real export.",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount",
+      "sign": -1,
+      "currency": "CAD"
+    }
+  }
+}

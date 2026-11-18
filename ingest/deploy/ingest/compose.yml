@@ -1,0 +1,80 @@
+# Scraper and loader jobs. Run with `docker compose run --rm <service> ...`
+# (nightly.sh does this); nothing here stays up.
+# Scrapes go through scrape.sh, which mounts that bank's decrypted logins.
+
+name: ingest
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  environment: &paths_inside
+    # Mount points inside the containers; ingest.json paths use these names.
+    INGEST_CONFIG: /etc/ingest/ingest.json
+    FINANCE_DIR: /srv/finance
+    STATE_DIR: /srv/ingest-state
+    SECRETS_DIR: /srv/ingest-secrets
+    BANKS_DIR: /opt/ingest/ingest/banks
+
+services:
+  scraper:
+    <<: *hardening
+    build: {context: ../.., target: scraper}
+    image: ingest-scraper:local
+    user: "2001:2000"
+    # A real init as PID 1: xvfb-run waits for a signal from Xvfb that the
+    # kernel drops when xvfb-run itself is PID 1, so it would hang forever.
+    init: true
+    # Chrome's sandbox needs to create user/pid/net namespaces. Docker's default
+    # seccomp profile only allows that with CAP_SYS_ADMIN, so the container's
+    # seccomp filter is off and Chrome's own, stricter seccomp-BPF filter guards
+    # the renderers instead. AppArmor stays on with a profile that adds `userns`.
+    # Still: non-root, no capabilities, no-new-privileges, read-only root.
+    security_opt:
+      - "no-new-privileges:true"
+      - "seccomp=unconfined"
+      - "apparmor=ingest-scraper"
+    shm_size: 1g
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 512
+    environment:
+      <<: *paths_inside
+      HOME: /tmp/home
+      INGEST_LOCALE: ${INGEST_LOCALE:?set INGEST_LOCALE in deploy/ingest/.env}
+      INGEST_TIMEZONE: ${INGEST_TIMEZONE:?set INGEST_TIMEZONE in deploy/ingest/.env}
+    volumes:
+      - ${STACK_DIR:?set STACK_DIR in .env}/config/ingest.json:/etc/ingest/ingest.json:ro
+      - ../../banks:/opt/ingest/ingest/banks:ro
+      - ${STACK_DIR}/secrets/scraper:/srv/ingest-secrets
+      # Bank logins: scrape.sh adds -v <RAM dir>:/run/ingest-creds:ro per run.
+      - ${STACK_DIR}/state/bundles:/srv/ingest-state/bundles
+      - ${FINANCE_DIR:?set FINANCE_DIR in .env}/raw:/srv/finance/raw
+    ports:
+      # Only used when mfa.unattended is "form". Bind to a LAN/tailnet address only.
+      - "${MFA_BIND:-127.0.0.1}:8765:8765"
+    networks: [scraper_net]
+
+  loader:
+    <<: *hardening
+    build: {context: ../.., target: loader}
+    image: ingest-loader:local
+    user: "2002:2000"
+    cpus: 1
+    mem_limit: 512m
+    pids_limit: 128
+    volumes:
+      - ${STACK_DIR:?set STACK_DIR in .env}/config/ingest.json:/etc/ingest/ingest.json:ro
+      - ${STACK_DIR}/secrets/loader/sure_api_key:/run/secrets/sure_api_key:ro
+      - ${FINANCE_DIR:?set FINANCE_DIR in .env}/raw:/srv/finance/raw:ro
+      - ${FINANCE_DIR}/normalized:/srv/finance/normalized
+      - ${STACK_DIR}/state/review:/srv/ingest-state/review
+    networks: [sure_net]
+
+networks:
+  scraper_net:
+    external: true
+  sure_net:
+    external: true
