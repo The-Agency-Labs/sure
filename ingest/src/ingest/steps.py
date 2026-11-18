@@ -236,7 +236,10 @@ class Allowlist:
         }
 
     def is_blocked(self, url: str) -> bool:
-        return any(re.search(p, url, re.IGNORECASE) for p in self.block)
+        # Also check with camelCase split into words, so "emtTransfer" or
+        # "addPayee" hit the whole-word money patterns.
+        split = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", url)
+        return any(re.search(p, u, re.IGNORECASE) for p in self.block for u in (url, split))
 
     def decide(self, url: str, method: str, is_navigation: bool) -> str:
         """Return 'allow' or the reason the request is aborted."""

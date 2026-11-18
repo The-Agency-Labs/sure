@@ -321,6 +321,10 @@ class Runner:
         result = RunResult(institution=self.script.institution, ok=False)
         cfg = self.config
         cfg.profile_dir.mkdir(parents=True, exist_ok=True)
+        # Every run is a fresh container, so a lock left in the profile is from a
+        # run that was killed; Chrome would otherwise refuse to start.
+        for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+            (cfg.profile_dir / name).unlink(missing_ok=True)
         with sync_playwright() as pw:
             context = pw.chromium.launch_persistent_context(
                 str(cfg.profile_dir),

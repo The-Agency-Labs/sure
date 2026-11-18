@@ -67,7 +67,8 @@ def url_pattern(url: str) -> str:
             parts.append(seg)
         elif re.search(r"\d", seg) or len(seg) > 24:
             parts.append(":id")
-        elif seg.lower() in vocabulary() or re.fullmatch(r"[a-z]{1,12}(?:[-_][a-z]{1,12}){0,3}(?:\.[a-z]{2,5})?", seg):
+        elif seg.lower() in vocabulary() or re.fullmatch(r"[a-z]{1,12}(?:[-_][a-z]{1,12}){0,3}(?:\.[a-z]{2,5})?", seg) or re.fullmatch(r"[a-z]+(?:[A-Z][a-z]+){1,3}", seg):
+            # lowerCamelCase API names ("verifyCode"): letters only, so never an id
             parts.append(seg.lower())
         else:
             parts.append(":x")
