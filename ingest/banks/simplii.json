@@ -3,8 +3,8 @@
     "Recorded 2026-11-17 with `ingest record` (real Chrome). Not yet run on the VM.",
     "Unverified until the first VM run: the allowlist's POST patterns and extra hosts",
     "(an unlisted request is aborted in the browser and logged by path shape, so the",
-    "first runs reveal them without anything reaching the bank), and the verification",
-    "step's input/submit locators. Codes come from the Simplii app; there is no \"remember this device\" box.",
+    "first runs reveal them without anything reaching the bank). Verification screen taken from",
+    "screenshots: \"Push to your device\" is preselected, Send, then a 6-digit code and Next; no remember box.",
     "Every account in the download dropdown is fetched (for_each_account). Files are named",
     "after the account's label, e.g. no-fee-chequing-1234__<date>.csv; map each name to a",
     "Sure account in ingest.json \"accounts\" as \"simplii:<name>\"."
@@ -70,16 +70,21 @@
       "action": "mfa",
       "intent": "answer a one-time verification code if asked",
       "detect": {
-        "css": "[data-test-id*=\"-send-\"]"
+        "role": "heading",
+        "name": "Verify your identity"
       },
       "request": {
-        "css": "[data-test-id*=\"-send-\"]"
+        "role": "button",
+        "name": "Send",
+        "exact": true
       },
       "input": {
-        "css": "[data-test-id*=\"verification-code\"]"
+        "label": "Enter the one-time verification code"
       },
       "submit": {
-        "css": "button[type=\"submit\"]"
+        "role": "button",
+        "name": "Next",
+        "exact": true
       },
       "timeout_ms": 8000
     },

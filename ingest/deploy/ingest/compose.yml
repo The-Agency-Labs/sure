@@ -24,6 +24,9 @@ services:
     build: {context: ../.., target: scraper}
     image: ingest-scraper:local
     user: "2001:2000"
+    # A real init as PID 1: xvfb-run waits for a signal from Xvfb that the
+    # kernel drops when xvfb-run itself is PID 1, so it would hang forever.
+    init: true
     # Chrome's sandbox needs to create user/pid/net namespaces. Docker's default
     # seccomp profile only allows that with CAP_SYS_ADMIN, so the container's
     # seccomp filter is off and Chrome's own, stricter seccomp-BPF filter guards
