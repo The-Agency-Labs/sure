@@ -20,7 +20,8 @@
     "hosts": [
       "online.simplii.com",
       "www.simplii.com",
-      "w-profiling.simplii.com"
+      "w-profiling.simplii.com",
+      "www.cibc.com"
     ],
     "post": [
       "^https://online\\.simplii\\.com/ebm-anp/api/v\\d+/json/",

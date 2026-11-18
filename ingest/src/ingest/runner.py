@@ -67,6 +67,21 @@ class RunResult:
     error: str | None = None
 
 
+# Developer labels on the page (data-test-id / data-testid) and whether each is
+# visible: code names, not personal data, and often what a broken locator needs.
+TEST_ID_INVENTORY = """() => {
+  const out = [];
+  for (const el of document.querySelectorAll('[data-test-id],[data-testid]')) {
+    const id = el.getAttribute('data-test-id') || el.getAttribute('data-testid');
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(id)) continue;
+    const r = el.getBoundingClientRect();
+    out.push(id + (r.width && r.height ? '' : ' (hidden)'));
+    if (out.length >= 400) break;
+  }
+  return [...new Set(out)];
+}"""
+
+
 class Runner:
     def __init__(self, script: Script, config: RunConfig, secrets: SecretStore, codes: CodeProvider, notifier: Notifier):
         self.script = script
@@ -287,10 +302,12 @@ class Runner:
         os.chmod(folder, 0o700)
         snapshot = ""
         page_pattern = ""
+        test_ids: list = []
         if page is not None:
             try:
                 page_pattern = url_pattern(page.url)
                 snapshot = scrub_snapshot(page.locator("body").aria_snapshot(timeout=5_000))
+                test_ids = page.evaluate(TEST_ID_INVENTORY)
             except PlaywrightError as exc:
                 snapshot = f"(snapshot unavailable: {type(exc).__name__})"
             if phase != "login" and self.config.failure_screenshots:
@@ -309,6 +326,7 @@ class Runner:
             "error": self._redact(str(error))[:2000],
             "page": page_pattern,
             "snapshot": snapshot,
+            "test_ids": test_ids,
             "script_path": str(self.script.path) if self.script.path else None,
             "script": self.script.to_dict(),
         }
