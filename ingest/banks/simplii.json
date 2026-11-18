@@ -7,7 +7,8 @@
     "screenshots: \"Push to your device\" is preselected, Send, then a 6-digit code and Next; no remember box.",
     "Every account in the download dropdown is fetched (for_each_account). Files are named",
     "after the account's label, e.g. no-fee-chequing-1234__<date>.csv; map each name to a",
-    "Sure account in ingest.json \"accounts\" as \"simplii:<name>\"."
+    "Sure account in ingest.json \"accounts\" as \"simplii:<name>\".",
+    "Allowlist from the first VM runs (2026-11-18): Simplii's own hosts only. The POST with a random five-part path on online.simplii.com is Akamai's bot check; sign-in never starts without it. Analytics, marketing and chat (go-mpulse, adobedtm, braze/appboy, ada.support) stay blocked."
   ],
   "institution": "simplii",
   "currency": "CAD",
@@ -16,10 +17,13 @@
       "^https://online\\.simplii\\.com/ebm-resources/public/"
     ],
     "hosts": [
-      "online.simplii.com"
+      "online.simplii.com",
+      "www.simplii.com",
+      "w-profiling.simplii.com"
     ],
     "post": [
-      "^https://online\\.simplii\\.com/ebm-anp/api/v1/json/sessions$"
+      "^https://online\\.simplii\\.com/ebm-anp/api/v1/json/sessions$",
+      "^https://online\\.simplii\\.com/(?!ebm-)[A-Za-z0-9_]+(?:/[A-Za-z0-9_-]+){4}$"
     ],
     "block": [
       "#/(move-money|pay|send)",
