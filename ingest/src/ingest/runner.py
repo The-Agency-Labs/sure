@@ -17,6 +17,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
@@ -89,7 +90,8 @@ class Runner:
             return
         pattern = url_pattern(req.url)
         result.aborted_requests.append((pattern, verdict))
-        log.info("aborted %s %s (%s)", req.method, pattern, verdict)
+        # Host plus path shape: enough to extend an allowlist, no ids or query.
+        log.info("aborted %s %s%s (%s)", req.method, urlsplit(req.url).hostname or "", pattern, verdict)
         if req.is_navigation_request():
             try:
                 top_level = req.frame.parent_frame is None
