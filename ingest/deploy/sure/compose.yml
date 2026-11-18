@@ -34,7 +34,7 @@ services:
   web:
     image: ghcr.io/we-promise/sure:${SURE_IMAGE_TAG:-stable}
     volumes:
-      - app-storage:/rails/storage
+      - ./data/storage:/rails/storage
     ports:
       - "${SURE_BIND_ADDR:?set SURE_BIND_ADDR in .env}:${PORT:-3000}:3000"
     restart: unless-stopped
@@ -52,7 +52,7 @@ services:
     image: ghcr.io/we-promise/sure:${SURE_IMAGE_TAG:-stable}
     command: bundle exec sidekiq
     volumes:
-      - app-storage:/rails/storage
+      - ./data/storage:/rails/storage
     restart: unless-stopped
     depends_on:
       db:
@@ -68,7 +68,7 @@ services:
     image: postgres:16
     restart: unless-stopped
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     environment:
       <<: *db_env
     healthcheck:
@@ -90,7 +90,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${BACKUP_DIR:?set BACKUP_DIR in .env}:/backups
-      - app-storage:/rails/storage
+      - ./data/storage:/rails/storage
       - .:/config:ro
     environment:
       <<: *db_env
@@ -110,7 +110,7 @@ services:
     image: redis:7.4
     restart: unless-stopped
     volumes:
-      - redis-data:/data
+      - ./data/redis:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -119,10 +119,6 @@ services:
     networks:
       - sure_net
 
-volumes:
-  app-storage:
-  postgres-data:
-  redis-data:
 
 networks:
   sure_net:

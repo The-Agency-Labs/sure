@@ -46,6 +46,7 @@ script reads it. Host-side commands go through `deploy/ingest/ingest.sh`.
 | Path on the VM | What | Owner |
 |---|---|---|
 | `~/sure/` | Sure `compose.yml` + `.env` (600) | root 700 |
+| `~/sure/data/` | Sure's database (`postgres/`), uploads (`storage/`) and `redis/` | the containers' own users |
 | `~/sure/repo/` | sparse checkout of this repo (`ingest/` only) | root |
 | `~/sure/venv/` | host tools (`repair`, `due`), run via `ingest.sh` | root |
 | `~/sure/config/ingest.json`, `banks.list` | config | root:finance 640 |
@@ -192,8 +193,9 @@ Run all VM steps in a root shell.
    the tailnet; the setting persists across reboots:
    `tailscale serve --bg --https=443 http://127.0.0.1:3000`.
    Sure is then reachable only at `https://<vm>.<tailnet>.ts.net`, from tailnet
-   devices. (Binding the tailnet IP directly also works; `vm-setup.sh` makes Docker
-   wait for Tailscale at boot for that case.) Then
+   devices. (Binding the tailnet IP directly also works, but then Docker must wait
+   for Tailscale at boot: install `deploy/systemd/docker.service.d/10-after-tailscale.conf`
+   into `/etc/systemd/system/docker.service.d/`.) Then
    `cd ~/sure && docker compose up -d && docker compose --profile backup up -d backup`.
    Create your user and accounts in the UI. Then create an API key with read/write
    scope under Settings and write it to `~/sure/secrets/loader/sure_api_key`.

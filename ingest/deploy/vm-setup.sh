@@ -76,13 +76,6 @@ echo "== Docker networks"
 docker network inspect sure_net    >/dev/null 2>&1 || docker network create sure_net
 docker network inspect scraper_net >/dev/null 2>&1 || docker network create scraper_net
 
-echo "== Docker starts after Tailscale (Sure binds the tailnet IP only)"
-install -d -m 0755 /etc/systemd/system/docker.service.d
-install -m 0644 "$REPO/ingest/deploy/systemd/docker.service.d/10-after-tailscale.conf" /etc/systemd/system/docker.service.d/
-TS_IP=$(tailscale ip -4 2>/dev/null || true)
-[ -n "$TS_IP" ] && echo "   this VM's tailnet IP: $TS_IP  (use it for SURE_BIND_ADDR in $STACK_DIR/.env)" \
-  || echo "   tailscale has no IPv4 address yet: bring it up, then set SURE_BIND_ADDR" >&2
-
 echo "== systemd timer (installed, not enabled until setup is finished)"
 sed -e "s|@STACK_DIR@|$STACK_DIR|g" -e "s|@FINANCE_DIR@|$FINANCE_DIR|g" \
   "$REPO/ingest/deploy/systemd/ingest-nightly.service" > /etc/systemd/system/ingest-nightly.service
