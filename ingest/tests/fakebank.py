@@ -47,7 +47,7 @@ MFA_SEND = """<h1>Verify your identity</h1>
 <button>Verify</button></form>"""
 
 DOWNLOAD_PAGE = """<h1>Download transactions</h1>
-<nav><a href="/download">Download page</a></nav>
+<nav><a href="/download">Download page</a> <a href="/lazy">Long page</a></nav>
 <label>Account <select id=acct>
   <option value="a1">Chequing 4455-1234</option>
   <option value="a2">Visa ending 9911</option>
@@ -56,6 +56,15 @@ DOWNLOAD_PAGE = """<h1>Download transactions</h1>
 <label>Format <select id=fmt><option>Quicken</option><option>CSV</option></select></label>
 <button onclick="if (acct.value === 'a3') { document.getElementById('msg').hidden = false } else { location.href='/export/transactions.csv?acct=' + acct.value + '&fmt=' + fmt.value }">Download</button>
 <p id=msg role=alert hidden>There are no transactions found that meet your request.</p>"""
+
+# An "Extras" panel far down the page that only renders once scrolled into view.
+LAZY_PAGE = """<h1>Home</h1><div style="height:4000px">accounts</div>
+<aside id=extras style="min-height:40px"></aside>
+<script>
+new IntersectionObserver((e, o) => {
+  if (e[0].isIntersecting) { extras.innerHTML = '<h2>Extras</h2><a href="/download">Download Transactions</a>'; o.disconnect() }
+}).observe(extras)
+</script>"""
 
 ACCOUNTS = """<h1>Accounts</h1>
 <p>Welcome back, {holder}</p>
@@ -137,6 +146,8 @@ class FakeBank:
                     self._page("Verify", MFA_SEND if bank.send_code else MFA)
                 elif path == "/download":
                     self._page("Download", DOWNLOAD_PAGE)
+                elif path == "/lazy":
+                    self._page("Long page", LAZY_PAGE)
                 elif path == "/accounts":
                     self._page(
                         "Accounts",
@@ -188,7 +199,7 @@ def script_dict(base: str) -> dict:
         "institution": "fakebank",
         "currency": "CAD",
         "allowlist": {
-            "navigation": [rf"^{base}/(login|mfa|accounts|download|export/transactions\.csv)"],
+            "navigation": [rf"^{base}/(login|mfa|accounts|download|lazy|export/transactions\.csv)"],
             "hosts": ["127.0.0.1"],
             "post": [rf"^{base}/(login|mfa|mfa/send)$"],
         },

@@ -10,6 +10,9 @@ Step actions:
   fill      {locator, secret}           type a stored bank login (set-credential.sh)
   click     {locator}
   wait      {locator}                   wait until visible
+  scroll    [locator]                   scroll down a screen at a time until the
+                                        locator shows up (panels that load only
+                                        when scrolled into view), or to the bottom
   dismiss   {locator}                   click if it shows up within a few seconds
                                         (promo pop-ups); skipped otherwise
   expect    {locator? , url?}           assert we are where we think we are;
@@ -58,7 +61,7 @@ def account_ref(label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
 
 
-ACTIONS = {"goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance", "select"}
+ACTIONS = {"scroll", "goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance", "select"}
 LOCATOR_KINDS = ("role", "label", "text", "placeholder", "testid", "css")
 
 
@@ -173,6 +176,7 @@ class Step:
             "click": ["locator"],
             "wait": ["locator"],
             "dismiss": ["locator"],
+            "scroll": [],
             "expect": [],
             "mfa": ["detect", "input", "submit"],
             "download": ["locator", "save_as"],

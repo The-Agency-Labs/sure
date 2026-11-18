@@ -347,3 +347,29 @@ def test_account_labels_stay_out_of_failure_bundles(tmp_path):
     assert not result.ok
     bundle = (result.failure_bundle / "bundle.json").read_text()
     assert "Visa ending 9911" not in bundle and "Chequing 4455-1234" not in bundle
+
+
+def test_scroll_loads_a_panel_that_appears_only_in_view(tmp_path):
+    with fakebank.FakeBank() as bank:
+        data = _dropdown_script(bank.url)
+        data["steps"][2:2] = [
+            {"action": "click", "intent": "open the long page", "locator": {"role": "link", "name": "Long page"}},
+            {"action": "scroll", "intent": "bring the extras panel into view", "locator": {"role": "link", "name": "Download Transactions"}},
+            {"action": "click", "intent": "open download transactions", "locator": {"role": "link", "name": "Download Transactions"}},
+        ]
+        runner, _ = make_runner(tmp_path, data, secrets=dict(SECRETS, **{"fakebank/card": "9911"}))
+        result = runner.run()
+    assert result.ok, result.error
+    assert bank.exports == ["acct=a2&fmt=CSV"]
+
+
+def test_without_scrolling_the_lazy_panel_never_appears(tmp_path):
+    with fakebank.FakeBank() as bank:
+        data = _dropdown_script(bank.url)
+        data["steps"][2:2] = [
+            {"action": "click", "intent": "open the long page", "locator": {"role": "link", "name": "Long page"}},
+            {"action": "click", "intent": "open download transactions", "locator": {"role": "link", "name": "Download Transactions"}},
+        ]
+        runner, _ = make_runner(tmp_path, data, secrets=dict(SECRETS, **{"fakebank/card": "9911"}))
+        result = runner.run()
+    assert not result.ok and "open download transactions" in result.error

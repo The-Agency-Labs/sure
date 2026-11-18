@@ -137,6 +137,8 @@ class Runner:
             step.locator.resolve(page).click(timeout=t)
         elif a == "wait":
             step.locator.resolve(page).wait_for(state="visible", timeout=t)
+        elif a == "scroll":
+            self._scroll(page, step.locator.resolve(page) if step.locator else None, t)
         elif a == "dismiss":
             loc = step.locator.resolve(page)
             try:
@@ -216,6 +218,24 @@ class Runner:
             raise UnexpectedPage(f"navigation to {self._blocked_navigation} was aborted")
         if self._extra_pages:
             raise UnexpectedPage("the site opened a new window")
+
+    def _scroll(self, page, target, t: int) -> None:
+        """Scroll a screen at a time: lazy panels load as they come into view."""
+        waited = 0
+        while True:
+            if target is not None and target.count() and target.first.is_visible():
+                target.first.scroll_into_view_if_needed(timeout=t)
+                return
+            at_bottom = page.evaluate(
+                "() => { window.scrollBy(0, Math.round(window.innerHeight * 0.8));"
+                " return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2 }"
+            )
+            page.wait_for_timeout(400)
+            waited += 400
+            if at_bottom and target is None:
+                return
+            if waited >= t:
+                raise UnexpectedPage("scrolled to the end of the page without finding the target")
 
     def _read_accounts(self, field, t: int) -> list[tuple[str, str]]:
         field.wait_for(state="visible", timeout=t)

@@ -95,6 +95,13 @@
       "timeout_ms": 8000
     },
     {
+      "action": "scroll",
+      "intent": "scroll to the Extras panel (it loads only when in view)",
+      "locator": {
+        "css": "[data-test-id=\"olb-extras-download-transactions\"]"
+      }
+    },
+    {
       "action": "expect",
       "intent": "land on the signed-in pages",
       "locator": {
@@ -103,6 +110,13 @@
     }
   ],
   "steps": [
+    {
+      "action": "scroll",
+      "intent": "scroll to the Extras panel (it loads only when in view)",
+      "locator": {
+        "css": "[data-test-id=\"olb-extras-download-transactions\"]"
+      }
+    },
     {
       "action": "click",
       "intent": "open download transactions",
