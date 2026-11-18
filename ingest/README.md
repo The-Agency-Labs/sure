@@ -29,17 +29,17 @@ ingest/
  │  profile per bank, logins in RAM per run  POST /api/v1/transactions    │
  │        │ writes                              │ reads ro      │         │
  │        ▼                                     ▼               ▼         │
- │  ~/mnt/finance/raw/<bank>/<year>/ ────────► ~/mnt/finance/normalized   │
+ │  /mnt/finance-data/raw/<bank>/<year>/ ─► /mnt/finance-data/normalized  │
  │                                                                        │
  │  Sure (web, worker, db, redis, backup) on sure_net ── web on 127.0.0.1 │
  │  behind Tailscale Serve (tailnet-only HTTPS); daily backups            │
  └────────────────────────────────────────────────────────────────────────┘
-   ~/mnt/finance = host ZFS dataset via virtiofs    ~/sure/config/credentials (encrypted bank logins)
+   /mnt/finance-data = host ZFS dataset via virtiofs    ~/sure/config/credentials (encrypted bank logins)
    push (optional, generic text) ◄── failures      Ollama on a GPU machine, tailnet only (repair only)
 ```
 
 Everything for this stack lives under `~/sure` (root's home, `STACK_DIR`), and the
-host's finance share is mounted at `~/mnt/finance` (`FINANCE_DIR`). Both are set in
+host's finance share is mounted at `/mnt/finance-data` (`FINANCE_DIR`). Both are set in
 `deploy/ingest/.env`; `deploy/ingest/env.sh` describes the layout, and every deploy
 script reads it. Host-side commands go through `deploy/ingest/ingest.sh`.
 
@@ -56,9 +56,9 @@ script reads it. Host-side commands go through `deploy/ingest/ingest.sh`.
 | `~/sure/state/review` | files that failed a check | ingest-loader |
 | `~/sure/state/repair-queue` | repairs waiting for the model | root 700 |
 | `~/sure/state/last-success/` | date of each bank's last good scrape (schedules) | root 700 |
-| `~/mnt/finance/raw/<bank>/<year>/` | original downloads, mode 444, never changed | ingest-scraper:finance 2750 |
-| `~/mnt/finance/normalized/` | canonical JSONL + `.ledger.json` | ingest-loader |
-| `~/mnt/finance/sure-backups/` | Sure's backup output | root |
+| `/mnt/finance-data/raw/<bank>/<year>/` | original downloads, mode 444, never changed | ingest-scraper:finance 2750 |
+| `/mnt/finance-data/normalized/` | canonical JSONL + `.ledger.json` | ingest-loader |
+| `/mnt/finance-data/sure-backups/` | Sure's backup output | root |
 
 Nothing under `~/sure/secrets/scraper`, `~/sure/secrets/loader` or `~/sure/state` is on the share, and none of it is backed up off the VM.
 
@@ -183,7 +183,7 @@ Run all VM steps in a root shell.
    ~/sure/repo/ingest/deploy/vm-setup.sh
    ```
    This creates the users (`finance` 2000, `ingest-scraper` 2001, `ingest-loader` 2002),
-   the directories and permissions in the table above, the `~/mnt/finance` fstab
+   the directories and permissions in the table above, the `/mnt/finance-data` fstab
    entry, the `sure_net` and `scraper_net` networks, the systemd timer, and starter
    copies of the configs.
 3. **Sure:** fill `~/sure/.env`: `SECRET_KEY_BASE`, `POSTGRES_PASSWORD`,
@@ -360,9 +360,9 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 
 | What | Command (VM, root unless noted) | Expect |
 |---|---|---|
-| virtiofs mount | `findmnt -t virtiofs ~/mnt/finance` | the `finance-data` source |
+| virtiofs mount | `findmnt -t virtiofs /mnt/finance-data` | the `finance-data` source |
 | UID passthrough | `cd ~/sure/repo/ingest/deploy/ingest && docker compose run --rm --no-deps --entrypoint sh scraper -c 'touch /srv/finance/raw/.t && rm /srv/finance/raw/.t'`, then on the host `ls -ln <dataset mountpoint>` | raw owned by 2001:2000 |
-| secrets not on share | `ls ~/mnt/finance` | only `raw normalized sure-backups` |
+| secrets not on share | `ls /mnt/finance-data` | only `raw normalized sure-backups` |
 | logins decrypt | `for f in ~/sure/config/credentials/*.cred; do n=$(basename $f .cred); systemd-creds decrypt --name=$n $f - \| wc -c \| sed "s/^/$n: /"; done` | a non-zero length per file (never print the value) |
 | no plaintext logins left | `ls /dev/shm` after a scrape | no `ingest-creds.*` |
 | Chrome sandbox works in the container | `docker compose run --rm --entrypoint sh scraper -c 'xvfb-run -a google-chrome --headless=new --dump-dom about:blank'` | `<html>…` and no "No usable sandbox" |
@@ -379,7 +379,7 @@ It expects 3 created, then 0 created and 3 already present on a re-run.
 | Ollama uses the GPU | `journalctl -u ollama \| grep "inference compute"` on the GPU machine | `library=CUDA`, not `cpu` |
 | Ollama structured output | `curl -s http://<GPU machine tailnet IP>:11434/api/chat -d '{"model":"<m>","stream":false,"keep_alive":0,"format":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]},"messages":[{"role":"user","content":"say ok"}]}'` | `{"ok":true}` in `message.content` |
 | timer | `systemctl list-timers ingest-nightly.timer` | next run ~03:30 |
-| backups | `ls ~/mnt/finance/sure-backups/*/` after 09:00 UTC | `*-scheduled` folders |
+| backups | `ls /mnt/finance-data/sure-backups/*/` after 09:00 UTC | `*-scheduled` folders |
 
 ## Still unverified
 

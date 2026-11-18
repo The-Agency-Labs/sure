@@ -3,7 +3,7 @@
 # Docker's apt repo) is installed and $STACK_DIR/repo holds the repo checkout.
 # Everything for this stack lives under STACK_DIR; the host's finance share is
 # mounted at FINANCE_DIR (layout: deploy/ingest/env.sh). Safe to re-run.
-#   STACK_DIR=~/sure FINANCE_DIR=~/mnt/finance vm-setup.sh   (these are the defaults)
+#   STACK_DIR=~/sure FINANCE_DIR=/mnt/finance-data vm-setup.sh   (these are the defaults)
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
@@ -13,7 +13,7 @@ FINANCE_GID=2000   # group: can read raw files
 SCRAPER_UID=2001   # writes raw/, owns browser profiles
 LOADER_UID=2002    # reads raw/, writes normalized/, holds the Sure API key
 STACK_DIR=${STACK_DIR:-/root/sure}
-FINANCE_DIR=${FINANCE_DIR:-/root/mnt/finance}
+FINANCE_DIR=${FINANCE_DIR:-/mnt/finance-data}
 REPO=$STACK_DIR/repo
 [ -d "$REPO/ingest" ] || { echo "no checkout at $REPO (see README, Setup)" >&2; exit 1; }
 
