@@ -36,7 +36,7 @@
   },
   "accounts": {
     "_format": "\"<institution>:<account_ref from the raw file name>\": \"<account name in Sure>\"",
-    "simplii:chequing": "Everyday Chequing",
+    "simplii:<account label, lower case with dashes>": "Everyday Chequing",
     "sunlife:pension": "Workplace Pension"
   },
   "formats": {

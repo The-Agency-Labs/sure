@@ -25,7 +25,7 @@ from playwright.sync_api import sync_playwright
 from .notify import CodeProvider, MfaNeeded, Notifier
 from .scrub import scrub_snapshot, url_pattern
 from .secrets import SecretStore
-from .steps import Script, Step
+from .steps import ACCOUNT, Script, Step, account_ref
 
 log = logging.getLogger("ingest.runner")
 
@@ -76,6 +76,8 @@ class Runner:
         self._used_secrets: list[str] = []
         self._blocked_navigation: str | None = None
         self._extra_pages = 0
+        self._accounts: list[tuple[str, str]] | None = None  # (label, account_ref), for_each_account only
+        self._account = 0
 
     # -- request filtering -------------------------------------------------
 
@@ -155,6 +157,16 @@ class Runner:
                 if box.count() and not box.is_checked():
                     box.check(timeout=t)
             step.submit.resolve(page).click(timeout=t)
+        elif a == "select" and step.option == ACCOUNT:
+            field = step.locator.resolve(page)
+            if self._accounts is None:
+                self._accounts = self._read_accounts(field, t)
+            label, ref = self._accounts[self._account]
+            log.info("account %d of %d: %s", self._account + 1, len(self._accounts), ref)
+            labels = [x.strip() for x in field.locator("option").all_inner_texts()]
+            if labels.count(label) != 1:
+                raise UnexpectedPage(f"account {self._account + 1} is no longer in the dropdown exactly once")
+            field.select_option(index=labels.index(label), timeout=t)
         elif a == "select":
             field = step.locator.resolve(page)
             if step.option is not None:
@@ -187,6 +199,21 @@ class Runner:
             raise UnexpectedPage(f"navigation to {self._blocked_navigation} was aborted")
         if self._extra_pages:
             raise UnexpectedPage("the site opened a new window")
+
+    def _read_accounts(self, field, t: int) -> list[tuple[str, str]]:
+        field.wait_for(state="visible", timeout=t)
+        labels = field.evaluate(
+            "el => [...el.options].filter(o => !o.disabled && o.value !== '').map(o => o.textContent.trim())"
+        )
+        accounts = [(label, account_ref(label)) for label in labels]
+        if not accounts or any(not ref for _, ref in accounts):
+            raise UnexpectedPage(f"the account dropdown lists {len(accounts)} usable accounts")
+        refs = [ref for _, ref in accounts]
+        if len(set(refs)) != len(refs):
+            raise UnexpectedPage("two accounts in the dropdown have the same name")
+        self._used_secrets.extend(labels)  # keep account labels out of failure bundles
+        log.info("accounts found: %s", ", ".join(refs))
+        return accounts
 
     def _download_or_empty(self, page, step: Step, result: RunResult, t: int) -> None:
         """Click, then wait for whichever comes first: a file, or the bank's
@@ -230,7 +257,8 @@ class Runner:
 
     def _raw_target(self, template: str, ext: str) -> Path:
         today = dt.date.today()
-        name = template.format(today=today.isoformat(), ext=ext)
+        ref = self._accounts[self._account][1] if self._accounts else None
+        name = template.format(today=today.isoformat(), ext=ext, **({"account": ref} if ref else {}))
         if Path(name).name != name or name.startswith("."):
             raise ValueError(f"save_as must be a plain file name, got {name!r}")
         folder = self.config.raw_root / self.script.institution / str(today.year)
@@ -311,22 +339,33 @@ class Runner:
                 context.route("**/*", lambda route: self._route(route, result))
                 page = context.pages[0] if context.pages else context.new_page()
                 context.on("page", self._on_new_page)
-                for phase, steps in (("login", self.script.login), ("steps", self.script.steps)):
-                    for i, step in enumerate(steps):
-                        log.info("[%s %d] %s", phase, i, step.intent)
-                        try:
-                            self._run_step(page, step, result)
-                        except Exception as exc:  # noqa: BLE001 - every failure stops the run
-                            result.error = f"{phase} step {i} ({step.intent}): {type(exc).__name__}"
-                            result.failure_bundle = self._bundle(page, phase, i, step, exc)
-                            log.error("stopped: %s; bundle at %s", result.error, result.failure_bundle)
-                            self.notifier.notify(f"Finance sync stopped: {self.script.institution} needs attention.")
-                            return result
+                if not self._run_phase(page, "login", self.script.login, result):
+                    return result
+                self._account = 0
+                while True:
+                    if not self._run_phase(page, "steps", self.script.steps, result):
+                        return result
+                    if self.script.for_each_account is None or self._account + 1 >= len(self._accounts or ()):
+                        break
+                    self._account += 1
                 result.ok = True
                 return result
             finally:
                 self._used_secrets.clear()
                 context.close()
+
+    def _run_phase(self, page, phase: str, steps, result: RunResult) -> bool:
+        for i, step in enumerate(steps):
+            log.info("[%s %d] %s", phase, i, step.intent)
+            try:
+                self._run_step(page, step, result)
+            except Exception as exc:  # noqa: BLE001 - every failure stops the run
+                result.error = f"{phase} step {i} ({step.intent}): {type(exc).__name__}"
+                result.failure_bundle = self._bundle(page, phase, i, step, exc)
+                log.error("stopped: %s; bundle at %s", result.error, result.failure_bundle)
+                self.notifier.notify(f"Finance sync stopped: {self.script.institution} needs attention.")
+                return False
+        return True
 
     def _on_new_page(self, new_page) -> None:
         self._extra_pages += 1

@@ -5,8 +5,9 @@
     "(an unlisted request is aborted in the browser and logged by path shape, so the",
     "first runs reveal them without anything reaching the bank), and the verification",
     "step's input/submit locators. Codes come from the Simplii app; there is no \"remember this device\" box.",
-    "Account choice comes from stored values, never the script: set-credential.sh",
-    "simplii chequing-account / card-account = text unique to that option, e.g. the last 4 digits."
+    "Every account in the download dropdown is fetched (for_each_account). Files are named",
+    "after the account's label, e.g. no-fee-chequing-1234__<date>.csv; map each name to a",
+    "Sure account in ingest.json \"accounts\" as \"simplii:<name>\"."
   ],
   "institution": "simplii",
   "currency": "CAD",
@@ -24,6 +25,9 @@
       "#/(move-money|pay|send)",
       "upcoming-transactions"
     ]
+  },
+  "for_each_account": {
+    "css": "[data-test-id=\"account-dropdown-select\"]"
   },
   "login": [
     {
@@ -97,11 +101,11 @@
     },
     {
       "action": "select",
-      "intent": "choose the chequing account",
+      "intent": "choose the next account",
       "locator": {
         "css": "[data-test-id=\"account-dropdown-select\"]"
       },
-      "option_secret": "simplii/chequing-account"
+      "option": "{account}"
     },
     {
       "action": "click",
@@ -120,52 +124,11 @@
     },
     {
       "action": "download",
-      "intent": "download chequing transactions",
+      "intent": "download this account's transactions",
       "locator": {
         "css": "[data-test-id=\"download-transactions-btn\"]"
       },
-      "save_as": "chequing__{today}.{ext}",
-      "empty": {
-        "text": "There are no transactions found that meet your request"
-      }
-    },
-    {
-      "action": "click",
-      "intent": "open download transactions again",
-      "locator": {
-        "css": "[data-test-id=\"olb-extras-download-transactions\"]"
-      }
-    },
-    {
-      "action": "select",
-      "intent": "choose the credit card",
-      "locator": {
-        "css": "[data-test-id=\"account-dropdown-select\"]"
-      },
-      "option_secret": "simplii/card-account"
-    },
-    {
-      "action": "click",
-      "intent": "use the default date range",
-      "locator": {
-        "css": "[data-test-id=\"display-date-range-input\"]"
-      }
-    },
-    {
-      "action": "select",
-      "intent": "choose CSV",
-      "locator": {
-        "css": "[data-test-id=\"software-dropdown-select\"]"
-      },
-      "option": "CSV"
-    },
-    {
-      "action": "download",
-      "intent": "download credit card transactions",
-      "locator": {
-        "css": "[data-test-id=\"download-transactions-btn\"]"
-      },
-      "save_as": "card__{today}.{ext}",
+      "save_as": "{account}__{today}.{ext}",
       "empty": {
         "text": "There are no transactions found that meet your request"
       }

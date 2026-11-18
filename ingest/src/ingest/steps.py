@@ -31,6 +31,15 @@ Step actions:
   balance   {locator, save_as}          save the text of a balance shown on the
                                         page (for portals with no export); the
                                         loader turns it into a balance update
+
+Every account in a dropdown: set ``for_each_account`` on the script to that
+dropdown's locator. The steps phase then runs once per account listed in it
+(placeholder entries with no value are skipped). The select step on that
+dropdown uses ``"option": "{account}"``, and every save_as uses ``{account}``,
+which becomes the account's label in lower case with dashes
+("No Fee Chequing 1234" -> "no-fee-chequing-1234"). That is the account_ref
+the loader maps to a Sure account, so a new account at the bank downloads on
+its own and waits in review until it is mapped.
 """
 
 from __future__ import annotations
@@ -40,6 +49,14 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+ACCOUNT = "{account}"
+
+
+def account_ref(label: str) -> str:
+    """An account's label as a file-name-safe account_ref: "Visa 9911" -> "visa-9911"."""
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+
 
 ACTIONS = {"goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance", "select"}
 LOCATOR_KINDS = ("role", "label", "text", "placeholder", "testid", "css")
@@ -278,6 +295,7 @@ class Script:
     steps: tuple[Step, ...]
     currency: str = "CAD"
     placeholder: bool = False  # true until the real flow is recorded; the scraper refuses to run it
+    for_each_account: Locator | None = None  # repeat the steps phase per option of this dropdown
     path: Path | None = field(default=None, compare=False)
 
     @classmethod
@@ -299,12 +317,30 @@ class Script:
             steps=steps,
             currency=data.get("currency", "CAD"),
             placeholder=bool(data.get("placeholder", False)),
+            for_each_account=Locator.parse(data["for_each_account"]) if "for_each_account" in data else None,
             path=path,
         )
+        script._check_accounts()
         for step in script.login:
             if step.action == "goto" and not script.allowlist.decide(step.url, "GET", True) == "allow":
                 raise ScriptError(f"goto url {step.url} is not on the allowlist")
         return script
+
+    def _check_accounts(self) -> None:
+        uses = [s for s in self.login + self.steps if s.option == ACCOUNT or ACCOUNT in (s.save_as or "")]
+        if self.for_each_account is None:
+            if uses:
+                raise ScriptError(f"{ACCOUNT} needs for_each_account on the script")
+            return
+        pickers = [i for i, s in enumerate(self.steps) if s.action == "select" and s.option == ACCOUNT]
+        if len(pickers) != 1 or self.steps[pickers[0]].locator != self.for_each_account:
+            raise ScriptError(f"for_each_account needs exactly one select step on that dropdown with option {ACCOUNT}")
+        for i, s in enumerate(self.steps):
+            if s.action in ("download", "balance"):
+                if ACCOUNT not in s.save_as:
+                    raise ScriptError(f"save_as of '{s.intent}' needs {ACCOUNT}, or every account overwrites the same file")
+                if i < pickers[0]:
+                    raise ScriptError(f"'{s.intent}' comes before the account is chosen")
 
     @classmethod
     def load(cls, path: Path) -> "Script":
@@ -318,6 +354,8 @@ class Script:
             "login": [s.to_dict() for s in self.login],
             "steps": [s.to_dict() for s in self.steps],
         }
+        if self.for_each_account is not None:
+            d["for_each_account"] = self.for_each_account.to_dict()
         if self.placeholder:
             d = {"placeholder": True, **d}
         return d

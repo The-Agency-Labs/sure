@@ -305,3 +305,45 @@ def test_nothing_to_download_is_skipped_and_the_run_continues(tmp_path):
     assert result.ok, result.error
     assert [p.name.split("__")[0] for p in result.downloads] == ["card"]
     assert bank.exports == ["acct=a2&fmt=CSV"]
+
+
+def _every_account_script(base):
+    data = _dropdown_script(base)
+    data["for_each_account"] = {"label": "Account"}
+    data["steps"][2] = {"action": "select", "intent": "pick the next account", "locator": {"label": "Account"}, "option": "{account}"}
+    data["steps"][-1]["save_as"] = "{account}__{today}.{ext}"
+    data["steps"][-1]["empty"] = {"text": "There are no transactions found"}
+    return data
+
+
+def test_every_account_in_the_dropdown_is_downloaded(tmp_path):
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, _every_account_script(bank.url))
+        result = runner.run()
+    assert result.ok, result.error
+    assert bank.exports == ["acct=a1&fmt=CSV", "acct=a2&fmt=CSV"]  # a3 has nothing to download
+    assert [p.name.split("__")[0] for p in result.downloads] == ["chequing-4455-1234", "visa-ending-9911"]
+
+
+def test_every_account_script_must_name_files_per_account(tmp_path):
+    from ingest.steps import ScriptError
+
+    data = _every_account_script("http://127.0.0.1:1")
+    data["steps"][-1]["save_as"] = "card__{today}.{ext}"
+    with pytest.raises(ScriptError, match="overwrites"):
+        Script.parse(data)
+    data = _every_account_script("http://127.0.0.1:1")
+    del data["for_each_account"]
+    with pytest.raises(ScriptError, match="needs for_each_account"):
+        Script.parse(data)
+
+
+def test_account_labels_stay_out_of_failure_bundles(tmp_path):
+    with fakebank.FakeBank() as bank:
+        data = _every_account_script(bank.url)
+        data["steps"][3]["option"] = "PDF"  # no such format: fails after the account is chosen
+        runner, _ = make_runner(tmp_path, data)
+        result = runner.run()
+    assert not result.ok
+    bundle = (result.failure_bundle / "bundle.json").read_text()
+    assert "Visa ending 9911" not in bundle and "Chequing 4455-1234" not in bundle
