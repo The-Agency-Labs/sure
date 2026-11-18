@@ -112,7 +112,7 @@ def cmd_scrape(args, cfg) -> int:
     # run with a push; "form" waits on a one-time page on the LAN/tailnet.
     if args.interactive:
         codes = TerminalCodes()
-    elif mfa.get("unattended", "stop") == "form":
+    elif args.code_form or mfa.get("unattended", "stop") == "form":
         codes = MfaServer(mfa.get("bind", "0.0.0.0"), mfa.get("port", 8765), mfa["public_base"], note)
     else:
         codes = NoWaitCodes(note, script.institution)
@@ -270,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("scrape", help="run one bank script")
     s.add_argument("bank")
     s.add_argument("--interactive", action="store_true", help="started by hand: ask for any verification code in the terminal")
+    s.add_argument("--code-form", action="store_true", help="ask for any verification code on the one-time web page (mfa.public_base), even if mfa.unattended is \"stop\"")
     s.set_defaults(fn=cmd_scrape)
 
     s = sub.add_parser("load", help="parse new raw files and load them into Sure")

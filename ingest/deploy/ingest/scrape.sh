@@ -26,4 +26,5 @@ done
 chown -R "$SCRAPER_UID" "$tmp"
 chmod 0400 "$tmp"/*
 chmod 0500 "$tmp"
-docker compose run --rm --no-deps -v "$tmp:/run/ingest-creds:ro" scraper scrape "$BANK" "$@"
+# --service-ports publishes the one-time code page (MFA_BIND:8765) for this run.
+docker compose run --rm --no-deps --service-ports -v "$tmp:/run/ingest-creds:ro" scraper scrape "$BANK" "$@"

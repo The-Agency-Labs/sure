@@ -6,12 +6,15 @@ beyond what the caller passes as a short label.
 
 from __future__ import annotations
 
+import logging
 import secrets
 import threading
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Protocol
 from urllib.parse import parse_qs
+
+log = logging.getLogger(__name__)
 
 
 class Notifier(Protocol):
@@ -24,6 +27,7 @@ class NullNotifier:
 
     def notify(self, message: str, click_url: str | None = None) -> None:
         self.sent.append((message, click_url))
+        log.warning("%s%s", message, f" {click_url}" if click_url else "")
 
 
 class WebhookNotifier:
