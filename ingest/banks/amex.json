@@ -9,28 +9,34 @@
     "The \"Yes, ... help\" pop-up is closed with Escape, never clicked.",
     "Allowlist from the first VM run (2026-11-23): sign-in and verification POST to global.americanexpress.com/myca/logon/...; Akamai's bot check POSTs to www.../akam/... and to a random nine-part path on www. Telemetry (functions., identityrelease.), the geo check (ucmapi.) and marketing (pirecommendation.) stay blocked.",
     "Run 3: the sign-in POST returned 200 but the page then reported client errors and stayed on /login; functions.americanexpress.com (Amex's own, called around every sign-in) allowed to see if the page needs it.",
-    "2026-11-23: reach the download page via the header (Statement > Export Statement Data), not the dashboard's 'Download your Statements' tile, which never rendered on the VM (its payment-panel code is blocked by the money rule). Latest Transactions starts collapsed, so it is clicked open."
+    "2026-11-23: reach the download page via the header (Statement > Export Statement Data), not the dashboard's 'Download your Statements' tile, which never rendered on the VM (its payment-panel code is blocked by the money rule). Latest Transactions starts collapsed, so it is clicked open.",
+    "2026-11-23: Amex loads Google's invisible reCAPTCHA after sign-in when unsure of the device; blocking it left the page stuck. Allowed with the owner's OK: only /recaptcha/ on www.google.com and www.gstatic.com (everything else on those hosts is blocked). A visible puzzle is never solved: the run times out and stops."
   ],
   "institution": "amex",
   "currency": "CAD",
   "allowlist": {
     "navigation": [
       "^https://www\\.americanexpress\\.com/en-ca/",
-      "^https://global\\.americanexpress\\.com/"
+      "^https://global\\.americanexpress\\.com/",
+      "^https://www\\.(google|gstatic)\\.com/recaptcha/"
     ],
     "hosts": [
       "americanexpress.com",
-      "aexp-static.com"
+      "aexp-static.com",
+      "www.google.com",
+      "www.gstatic.com"
     ],
     "post": [
       "^https://global\\.americanexpress\\.com/myca/logon/",
       "^https://www\\.americanexpress\\.com/akam/",
       "^https://www\\.americanexpress\\.com/(?!en-ca/)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+){8}$",
-      "^https://functions\\.americanexpress\\.com/[A-Za-z0-9_-]+(\\?|$)"
+      "^https://functions\\.americanexpress\\.com/[A-Za-z0-9_-]+(\\?|$)",
+      "^https://www\\.(google|gstatic)\\.com/recaptcha/"
     ],
     "block": [
       "/(pay|payments?|transfer)(/|$|\\?)",
-      "#/(pay|transfer)"
+      "#/(pay|transfer)",
+      "^https://www\\.(google|gstatic)\\.com/(?!recaptcha/)"
     ]
   },
   "login": [
