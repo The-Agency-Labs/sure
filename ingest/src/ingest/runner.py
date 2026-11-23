@@ -84,15 +84,19 @@ BROWSER_FACTS = """() => ({
 
 
 TEST_ID_INVENTORY = """() => {
-  const out = [];
-  for (const el of document.querySelectorAll('[data-test-id],[data-testid]')) {
-    const id = el.getAttribute('data-test-id') || el.getAttribute('data-testid');
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(id)) continue;
-    const r = el.getBoundingClientRect();
-    out.push(id + (r.width && r.height ? '' : ' (hidden)'));
-    if (out.length >= 400) break;
+  // Plain loops and objects only: a site's own scripts can replace Set,
+  // iterators and spread, and the inventory must still work on those pages.
+  const els = document.querySelectorAll('[data-test-id],[data-testid]');
+  const seen = Object.create(null), out = [];
+  for (let i = 0; i < els.length && out.length < 400; i++) {
+    const id = els[i].getAttribute('data-test-id') || els[i].getAttribute('data-testid');
+    // Developer labels only: no spaces; long digit runs (dates, ids) masked.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.\/-]{0,127}$/.test(id)) continue;
+    const r = els[i].getBoundingClientRect();
+    const entry = id.replace(/[0-9]{4,}/g, '#') + (r.width && r.height ? '' : ' (hidden)');
+    if (!seen[entry]) { seen[entry] = 1; out.push(entry); }
   }
-  return [...new Set(out)];
+  return out;
 }"""
 
 
@@ -354,7 +358,7 @@ class Runner:
             try:
                 test_ids = page.evaluate(TEST_ID_INVENTORY)
             except PlaywrightError as exc:
-                test_ids = [f"(unavailable: {type(exc).__name__})"]
+                test_ids = [f"(unavailable: {type(exc).__name__}: {mask_long_numbers(str(exc).splitlines()[0][:160])})"]
             if phase != "login" and self.config.failure_screenshots:
                 try:
                     # Local only, for the human. Never read by the repair command.

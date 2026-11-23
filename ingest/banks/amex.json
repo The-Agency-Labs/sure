@@ -8,7 +8,8 @@
     "Full history (statements list) is not recorded yet: --full-history runs fetch the latest window only for now.",
     "The \"Yes, ... help\" pop-up is closed with Escape, never clicked.",
     "Allowlist from the first VM run (2026-11-23): sign-in and verification POST to global.americanexpress.com/myca/logon/...; Akamai's bot check POSTs to www.../akam/... and to a random nine-part path on www. Telemetry (functions., identityrelease.), the geo check (ucmapi.) and marketing (pirecommendation.) stay blocked.",
-    "Run 3: the sign-in POST returned 200 but the page then reported client errors and stayed on /login; functions.americanexpress.com (Amex's own, called around every sign-in) allowed to see if the page needs it."
+    "Run 3: the sign-in POST returned 200 but the page then reported client errors and stayed on /login; functions.americanexpress.com (Amex's own, called around every sign-in) allowed to see if the page needs it.",
+    "2026-11-23: reach the download page via the header (Statement > Export Statement Data), not the dashboard's 'Download your Statements' tile, which never rendered on the VM (its payment-panel code is blocked by the money rule). Latest Transactions starts collapsed, so it is clicked open."
   ],
   "institution": "amex",
   "currency": "CAD",
@@ -25,7 +26,7 @@
       "^https://global\\.americanexpress\\.com/myca/logon/",
       "^https://www\\.americanexpress\\.com/akam/",
       "^https://www\\.americanexpress\\.com/(?!en-ca/)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+){8}$",
-      "^https://functions\\.americanexpress\\.com/[A-Za-z0-9_-]+$"
+      "^https://functions\\.americanexpress\\.com/[A-Za-z0-9_-]+(\\?|$)"
     ],
     "block": [
       "/(pay|payments?|transfer)(/|$|\\?)",
@@ -90,20 +91,26 @@
     },
     {
       "action": "expect",
-      "intent": "land on the signed-in pages",
+      "intent": "land on the signed-in pages (header shows the Statement menu)",
       "locator": {
-        "role": "link",
-        "name": "Download your Statements"
+        "css": "text=\"Statement\" >> nth=0"
       }
     }
   ],
   "steps": [
     {
       "action": "click",
-      "intent": "open Download your Statements",
+      "intent": "open the Statement menu in the header",
+      "locator": {
+        "css": "text=\"Statement\" >> nth=0"
+      }
+    },
+    {
+      "action": "click",
+      "intent": "open Export Statement Data",
       "locator": {
         "role": "link",
-        "name": "Download your Statements"
+        "name": "Export Statement Data"
       }
     },
     {
