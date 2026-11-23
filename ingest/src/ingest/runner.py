@@ -24,7 +24,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 from .notify import CodeProvider, MfaNeeded, Notifier
-from .scrub import scrub_snapshot, url_pattern
+from .scrub import mask_long_numbers, scrub_snapshot, url_pattern
 from .secrets import SecretStore
 from .steps import ACCOUNT, Script, Step, account_ref
 
@@ -323,20 +323,25 @@ class Runner:
         return text
 
     def _bundle(self, page, phase: str, index: int, step: Step, error: Exception) -> Path:
-        stamp = dt.datetime.now().strftime("%Y%m%dT%H%M%S")
+        stamp = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         folder = self.config.bundle_root / f"{self.script.institution}-{stamp}"
         folder.mkdir(parents=True, exist_ok=True)
         os.chmod(folder, 0o700)
         snapshot = ""
-        page_pattern = ""
+        page_pattern = page_host = ""
         test_ids: list = []
         if page is not None:
+            page_pattern = url_pattern(page.url)
+            page_host = urlsplit(page.url).hostname or ""
+            # Independent: a page whose text snapshot fails can still list its test ids.
             try:
-                page_pattern = url_pattern(page.url)
                 snapshot = scrub_snapshot(page.locator("body").aria_snapshot(timeout=5_000))
+            except PlaywrightError as exc:
+                snapshot = f"(snapshot unavailable: {type(exc).__name__}: {mask_long_numbers(str(exc).splitlines()[0][:120])})"
+            try:
                 test_ids = page.evaluate(TEST_ID_INVENTORY)
             except PlaywrightError as exc:
-                snapshot = f"(snapshot unavailable: {type(exc).__name__})"
+                test_ids = [f"(unavailable: {type(exc).__name__})"]
             if phase != "login" and self.config.failure_screenshots:
                 try:
                     # Local only, for the human. Never read by the repair command.
@@ -352,6 +357,7 @@ class Runner:
             "error_type": type(error).__name__,
             "error": self._redact(str(error))[:2000],
             "page": page_pattern,
+            "host": page_host,
             "snapshot": snapshot,
             "test_ids": test_ids,
             "script_path": str(self.script.path) if self.script.path else None,
