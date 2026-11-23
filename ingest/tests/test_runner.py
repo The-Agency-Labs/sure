@@ -393,3 +393,16 @@ def test_history_steps_run_only_on_their_kind_of_run(tmp_path, full, fmt):
         result = runner.run()
     assert result.ok, result.error
     assert bank.exports == [f"acct=a2&fmt={fmt}"]
+
+
+def test_dismiss_with_escape_closes_a_popup_without_clicking_it(tmp_path):
+    with fakebank.FakeBank() as bank:
+        data = fakebank.script_dict(bank.url)
+        for step in data["login"] + data["steps"]:
+            if step["action"] == "dismiss":
+                step["locator"] = {"role": "button", "name": "Yes, I want help"}
+                step["key"] = "Escape"
+        runner, _ = make_runner(tmp_path, data)
+        result = runner.run()
+    assert result.ok, result.error
+    assert bank.hits["GET /help-signup"] == 0

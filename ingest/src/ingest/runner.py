@@ -150,7 +150,10 @@ class Runner:
             except PlaywrightTimeout:
                 log.info("nothing to dismiss: %s", step.intent)
                 return
-            loc.click(timeout=t)
+            if step.key:
+                page.keyboard.press(step.key)
+            else:
+                loc.click(timeout=t)
         elif a == "expect":
             if step.url and not re.search(step.url, page.url):
                 raise UnexpectedPage(f"expected a page matching {step.url}, got {url_pattern(page.url)}")

@@ -82,7 +82,9 @@ ACCOUNTS = """<h1>Accounts</h1>
 <div role=dialog aria-label="Special offer" id=promo>
   <h2>Special offer for {holder}</h2>
   <button onclick="document.getElementById('promo').remove()">No thanks</button>
-</div>"""
+  <button onclick="location.href='/help-signup'">Yes, I want help</button>
+</div>
+<script>document.addEventListener('keydown', e => {{ if (e.key === 'Escape') {{ const p = document.getElementById('promo'); if (p) p.remove() }} }})</script>"""
 
 
 class FakeBank:

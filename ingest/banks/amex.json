@@ -1,0 +1,150 @@
+{
+  "_notes": [
+    "Recorded 2026-11-22 with `ingest record` (real Chrome). Amex didn't ask for a code on the recording PC,",
+    "so the verification step below is a guess until the first VM run shows the real screen.",
+    "Allowlist starts minimal: the first VM runs show which Amex hosts and POSTs sign-in and the download need.",
+    "Latest Transactions' download button carries the billing period's start date in its test id",
+    "(.../latest-transactions/<date>/download-button), so it is matched by prefix and suffix.",
+    "Full history (statements list) is not recorded yet: --full-history runs fetch the latest window only for now.",
+    "The \"Yes, ... help\" pop-up is closed with Escape, never clicked."
+  ],
+  "institution": "amex",
+  "currency": "CAD",
+  "allowlist": {
+    "navigation": [
+      "^https://www\\.americanexpress\\.com/en-ca/",
+      "^https://global\\.americanexpress\\.com/"
+    ],
+    "hosts": [
+      "americanexpress.com",
+      "aexp-static.com"
+    ],
+    "post": [],
+    "block": [
+      "/(pay|payments?|transfer)(/|$|\\?)",
+      "#/(pay|transfer)"
+    ]
+  },
+  "login": [
+    {
+      "action": "goto",
+      "intent": "open the sign-in page",
+      "url": "https://www.americanexpress.com/en-ca/account/login"
+    },
+    {
+      "action": "dismiss",
+      "intent": "accept the cookie banner if shown",
+      "locator": {
+        "role": "button",
+        "name": "Accept All"
+      }
+    },
+    {
+      "action": "fill",
+      "intent": "enter the user ID",
+      "locator": {
+        "testid": "userid-input"
+      },
+      "secret": "amex/username"
+    },
+    {
+      "action": "fill",
+      "intent": "enter the password",
+      "locator": {
+        "testid": "password-input"
+      },
+      "secret": "amex/password"
+    },
+    {
+      "action": "click",
+      "intent": "submit the sign-in form",
+      "locator": {
+        "testid": "submit-button"
+      }
+    },
+    {
+      "action": "mfa",
+      "intent": "answer a one-time verification code if asked (locators are guesses)",
+      "detect": {
+        "text": "verification code"
+      },
+      "request": {
+        "role": "button",
+        "name": "Continue"
+      },
+      "input": {
+        "role": "textbox"
+      },
+      "submit": {
+        "role": "button",
+        "name": "Verify"
+      },
+      "timeout_ms": 8000
+    },
+    {
+      "action": "expect",
+      "intent": "land on the signed-in pages",
+      "locator": {
+        "role": "link",
+        "name": "Download your Statements"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "action": "click",
+      "intent": "open Download your Statements",
+      "locator": {
+        "role": "link",
+        "name": "Download your Statements"
+      }
+    },
+    {
+      "action": "dismiss",
+      "intent": "close the \"Yes, ... help\" pop-up without answering it",
+      "locator": {
+        "role": "button",
+        "name": "Yes, I want help"
+      },
+      "key": "Escape"
+    },
+    {
+      "action": "click",
+      "intent": "open Latest Transactions",
+      "locator": {
+        "role": "button",
+        "name": "Latest Transactions"
+      }
+    },
+    {
+      "action": "click",
+      "intent": "download the latest transactions (since the last statement)",
+      "locator": {
+        "css": "[data-testid^=\"myca-activity-statements/common/Table/latest-transactions/\"][data-testid$=\"/download-button\"]"
+      }
+    },
+    {
+      "action": "click",
+      "intent": "open the file type choice",
+      "locator": {
+        "text": "Select File Type"
+      }
+    },
+    {
+      "action": "click",
+      "intent": "choose CSV",
+      "locator": {
+        "role": "radio",
+        "name": "CSV"
+      }
+    },
+    {
+      "action": "download",
+      "intent": "download the CSV",
+      "locator": {
+        "css": "[data-test-id=\"myca-activity-download-footer-download-confirm-anchor\"]"
+      },
+      "save_as": "card__{today}.{ext}"
+    }
+  ]
+}

@@ -72,3 +72,19 @@ def test_keep_words_and_check(tmp_path):
 
     with pytest.raises(SensitiveValueFound):
         clean(RECORDING, keep=frozenset({"jane"}), check_values=["Jane"])
+
+
+def test_developer_test_ids_are_kept_and_others_scrubbed(tmp_path):
+    from ingest.clean_recording import clean
+
+    rec = tmp_path / "r.py"
+    rec.write_text(
+        'page.get_by_test_id("userid-input").click()\n'
+        'page.get_by_test_id("myca-activity/0/download-button").click()\n'
+        'page.get_by_test_id("account-12345678").click()\n'
+        'page.get_by_test_id("Jane Doe").click()\n'
+    )
+    out = clean(rec.read_text())
+    assert 'testid "userid-input"' in out
+    assert 'testid "myca-activity/0/download-button"' in out
+    assert "12345678" not in out and "Jane" not in out

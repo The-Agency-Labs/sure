@@ -13,7 +13,9 @@ Step actions:
   scroll    [locator]                   scroll down a screen at a time until the
                                         locator shows up (panels that load only
                                         when scrolled into view), or to the bottom
-  dismiss   {locator}                   click if it shows up within a few seconds
+  dismiss   {locator} [key]             if it shows up within a few seconds, click
+                                        it, or press ``key`` instead ("Escape":
+                                        close a pop-up without answering it)
                                         (promo pop-ups); skipped otherwise
   expect    {locator? , url?}           assert we are where we think we are;
                                         anything else stops the run
@@ -150,6 +152,7 @@ class Step:
     option: str | None = None
     option_secret: str | None = None
     history: str | None = None  # "recent" | "full": run only on that kind of run
+    key: str | None = None  # dismiss: press this key instead of clicking
     timeout_ms: int | None = None
 
     @classmethod
@@ -182,6 +185,7 @@ class Step:
             option=data.get("option"),
             option_secret=data.get("option_secret"),
             history=data.get("history"),
+            key=data.get("key"),
             timeout_ms=data.get("timeout_ms"),
         )
         step._check()
@@ -204,6 +208,8 @@ class Step:
         for key in need:
             if getattr(self, key) is None:
                 raise ScriptError(f"{self.action} step '{self.intent}' needs {key}")
+        if self.key is not None and (self.action != "dismiss" or self.key not in ("Escape", "Enter", "Tab")):
+            raise ScriptError(f"step '{self.intent}': key is only for dismiss, and only Escape, Enter or Tab")
         if self.history not in (None, "recent", "full"):
             raise ScriptError(f"step '{self.intent}': history must be \"recent\" or \"full\"")
         if self.action == "select" and (self.option is None) == (self.option_secret is None):
@@ -213,7 +219,7 @@ class Step:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"action": self.action, "intent": self.intent}
-        for key in ("url", "secret", "save_as", "option", "option_secret", "history", "timeout_ms"):
+        for key in ("url", "secret", "save_as", "option", "option_secret", "history", "key", "timeout_ms"):
             if getattr(self, key) is not None:
                 d[key] = getattr(self, key)
         for key in ("locator", "detect", "input", "submit", "request", "remember", "empty"):
