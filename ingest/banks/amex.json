@@ -104,7 +104,7 @@
       "intent": "close the \"Yes, ... help\" pop-up without answering it",
       "locator": {
         "role": "button",
-        "name": "Yes, I want help"
+        "name": "Yes"
       },
       "key": "Escape"
     },
