@@ -128,9 +128,9 @@
     },
     {
       "action": "click",
-      "intent": "choose \"All within date range\" (click its label: the radio button sits under it)",
+      "intent": "choose \"All available\" (full history; the loader skips what it already has)",
       "locator": {
-        "css": "[data-test-id=\"display-date-range-label\"]"
+        "css": "[data-test-id=\"display-all-available-label\"]"
       }
     },
     {
