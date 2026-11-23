@@ -373,3 +373,23 @@ def test_without_scrolling_the_lazy_panel_never_appears(tmp_path):
         runner, _ = make_runner(tmp_path, data, secrets=dict(SECRETS, **{"fakebank/card": "9911"}))
         result = runner.run()
     assert not result.ok and "open download transactions" in result.error
+
+
+def _history_script(base):
+    data = _dropdown_script(base)
+    fmt = data["steps"][3]
+    data["steps"][3:4] = [
+        dict(fmt, intent="recent: Quicken", option="Quicken", history="recent"),
+        dict(fmt, intent="full: CSV", option="CSV", history="full"),
+    ]
+    return data
+
+
+@pytest.mark.parametrize("full, fmt", [(False, "Quicken"), (True, "CSV")])
+def test_history_steps_run_only_on_their_kind_of_run(tmp_path, full, fmt):
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, _history_script(bank.url), secrets=dict(SECRETS, **{"fakebank/card": "9911"}))
+        runner.config.full_history = full
+        result = runner.run()
+    assert result.ok, result.error
+    assert bank.exports == [f"acct=a2&fmt={fmt}"]

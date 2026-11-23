@@ -106,7 +106,9 @@ def cmd_scrape(args, cfg) -> int:
         locale=os.environ.get("INGEST_LOCALE") or browser.get("locale"),
         timezone_id=os.environ.get("INGEST_TIMEZONE") or browser.get("timezone"),
         mfa_timeout_s=mfa.get("timeout_s", 300),
+        full_history=args.full_history,
     )
+    log.info("%s: %s history", args.bank, "full" if args.full_history else "recent")
     note = notifier(cfg)
     # By hand: type the code in the terminal. Unattended: "stop" (default) ends the
     # run with a push; "form" waits on a one-time page on the LAN/tailnet.
@@ -270,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("scrape", help="run one bank script")
     s.add_argument("bank")
     s.add_argument("--interactive", action="store_true", help="started by hand: ask for any verification code in the terminal")
+    s.add_argument("--full-history", action="store_true", help="fetch all the history the bank offers (first run, catch-up), not just its latest window")
     s.add_argument("--code-form", action="store_true", help="ask for any verification code on the one-time web page (mfa.public_base), even if mfa.unattended is \"stop\"")
     s.set_defaults(fn=cmd_scrape)
 

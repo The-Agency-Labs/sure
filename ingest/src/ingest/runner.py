@@ -51,6 +51,7 @@ class RunConfig:
     locale: str | None = None
     timezone_id: str | None = None
     step_timeout_ms: int = 20_000
+    full_history: bool = False  # run "history": "full" steps instead of "recent" ones
     dismiss_wait_ms: int = 4_000
     mfa_detect_ms: int = 8_000
     mfa_timeout_s: float = 300
@@ -127,6 +128,9 @@ class Runner:
         return value
 
     def _run_step(self, page, step: Step, result: RunResult) -> None:
+        if step.history and step.history != ("full" if self.config.full_history else "recent"):
+            log.info("skipped: only on %s-history runs", step.history)
+            return
         t = self._timeout(step)
         a = step.action
         if a == "goto":

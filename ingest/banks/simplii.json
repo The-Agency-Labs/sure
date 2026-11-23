@@ -129,10 +129,19 @@
     },
     {
       "action": "click",
+      "intent": "choose \"All within date range\" with Simplii's default dates (its latest window)",
+      "locator": {
+        "css": "[data-test-id=\"display-date-range-label\"]"
+      },
+      "history": "recent"
+    },
+    {
+      "action": "click",
       "intent": "choose \"All available\" (full history; the loader skips what it already has)",
       "locator": {
         "css": "[data-test-id=\"display-all-available-label\"]"
-      }
+      },
+      "history": "full"
     },
     {
       "action": "select",

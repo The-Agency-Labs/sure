@@ -35,6 +35,11 @@ Step actions:
                                         page (for portals with no export); the
                                         loader turns it into a balance update
 
+Any step can carry ``"history": "recent"`` or ``"history": "full"``: it then runs
+only on nightly runs (recent) or on full-history runs (``scrape --full-history``:
+a bank's first run, a catch-up after a missed night, or by hand). Typically two
+clicks on the bank's date-range choice: its latest window, or everything.
+
 Every account in a dropdown: set ``for_each_account`` on the script to that
 dropdown's locator. The steps phase then runs once per account listed in it
 (placeholder entries with no value are skipped). The select step on that
@@ -144,6 +149,7 @@ class Step:
     empty: Locator | None = None
     option: str | None = None
     option_secret: str | None = None
+    history: str | None = None  # "recent" | "full": run only on that kind of run
     timeout_ms: int | None = None
 
     @classmethod
@@ -175,6 +181,7 @@ class Step:
             empty=loc("empty"),
             option=data.get("option"),
             option_secret=data.get("option_secret"),
+            history=data.get("history"),
             timeout_ms=data.get("timeout_ms"),
         )
         step._check()
@@ -197,6 +204,8 @@ class Step:
         for key in need:
             if getattr(self, key) is None:
                 raise ScriptError(f"{self.action} step '{self.intent}' needs {key}")
+        if self.history not in (None, "recent", "full"):
+            raise ScriptError(f"step '{self.intent}': history must be \"recent\" or \"full\"")
         if self.action == "select" and (self.option is None) == (self.option_secret is None):
             raise ScriptError(f"select step '{self.intent}' needs exactly one of option or option_secret")
         if self.action == "expect" and self.locator is None and self.url is None:
@@ -204,7 +213,7 @@ class Step:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"action": self.action, "intent": self.intent}
-        for key in ("url", "secret", "save_as", "option", "option_secret", "timeout_ms"):
+        for key in ("url", "secret", "save_as", "option", "option_secret", "history", "timeout_ms"):
             if getattr(self, key) is not None:
                 d[key] = getattr(self, key)
         for key in ("locator", "detect", "input", "submit", "request", "remember", "empty"):
