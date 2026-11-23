@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import logging
 import os
+import random
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -56,6 +57,10 @@ class RunConfig:
     mfa_detect_ms: int = 8_000
     mfa_timeout_s: float = 300
     failure_screenshots: bool = True
+    # Act at a person's pace: type key by key with uneven gaps, move the mouse
+    # to a button before clicking it, and pause between steps. Anti-bot checks
+    # score instant form fills. Tests turn it off for speed.
+    human_pacing: bool = True
 
 
 @dataclass
@@ -70,6 +75,14 @@ class RunResult:
 
 # Developer labels on the page (data-test-id / data-testid) and whether each is
 # visible: code names, not personal data, and often what a broken locator needs.
+# What a site's bot check sees first. No page content, no personal data.
+BROWSER_FACTS = """() => ({
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, language: navigator.language,
+  screen: screen.width + 'x' + screen.height, window: outerWidth + 'x' + outerHeight,
+  webdriver: navigator.webdriver,
+})"""
+
+
 TEST_ID_INVENTORY = """() => {
   const out = [];
   for (const el of document.querySelectorAll('[data-test-id],[data-testid]')) {
@@ -136,9 +149,9 @@ class Runner:
         if a == "goto":
             page.goto(step.url, timeout=t)
         elif a == "fill":
-            step.locator.resolve(page).fill(self._secret(step.secret), timeout=t)
+            self._type(page, step.locator.resolve(page), self._secret(step.secret), t)
         elif a == "click":
-            step.locator.resolve(page).click(timeout=t)
+            self._click(page, step.locator.resolve(page), t)
         elif a == "wait":
             step.locator.resolve(page).wait_for(state="visible", timeout=t)
         elif a == "scroll":
@@ -153,7 +166,7 @@ class Runner:
             if step.key:
                 page.keyboard.press(step.key)
             else:
-                loc.click(timeout=t)
+                self._click(page, loc, t)
         elif a == "expect":
             if step.url and not re.search(step.url, page.url):
                 raise UnexpectedPage(f"expected a page matching {step.url}, got {url_pattern(page.url)}")
@@ -173,16 +186,16 @@ class Runner:
                     raise MfaNeeded("verification code needed; nobody to answer")
                 ask = step.request.resolve(page)
                 if ask.count():  # some banks (or some visits) send the code without being asked
-                    ask.first.click(timeout=t)
+                    self._click(page, ask.first, t)
             log.info("verification prompt shown; waiting for the code")
             code = self.codes.wait_for_code(self.config.mfa_timeout_s)
             self._used_secrets.append(code)
-            step.input.resolve(page).fill(code, timeout=t)
+            self._type(page, step.input.resolve(page), code, t)
             if step.remember is not None:
                 box = step.remember.resolve(page)
                 if box.count() and not box.is_checked():
                     box.check(timeout=t)
-            step.submit.resolve(page).click(timeout=t)
+            self._click(page, step.submit.resolve(page), t)
         elif a == "select" and step.option == ACCOUNT:
             field = step.locator.resolve(page)
             if self._accounts is None:
@@ -208,7 +221,7 @@ class Runner:
             field.select_option(index=matches[0], timeout=t)
         elif a == "download" and step.empty is None:
             with page.expect_download(timeout=max(t, 60_000)) as info:
-                step.locator.resolve(page).click(timeout=t)
+                self._click(page, step.locator.resolve(page), t)
             result.downloads.append(self._save_download(info.value, step.save_as))
         elif a == "download":
             self._download_or_empty(page, step, result, t)
@@ -268,7 +281,7 @@ class Runner:
         stale = empty.first.is_visible()
         got: list = []
         page.once("download", lambda download: got.append(download))
-        step.locator.resolve(page).click(timeout=t)
+        self._click(page, step.locator.resolve(page), t)
         waited, limit = 0, max(t, 60_000)
         while waited < limit:
             if got:
@@ -385,7 +398,8 @@ class Runner:
                 # Look like the person's own Chrome, not a test harness: Playwright's
                 # --enable-automation sets navigator.webdriver and shows a banner.
                 ignore_default_args=["--enable-automation"],
-                args=["--disable-blink-features=AutomationControlled"],
+                args=["--disable-blink-features=AutomationControlled"]
+                + ([] if cfg.headless else ["--window-position=0,0", "--window-size=1920,1080"]),
                 no_viewport=not cfg.headless,  # real window size under Xvfb, not an emulated viewport
                 accept_downloads=True,
                 locale=cfg.locale,
@@ -395,6 +409,7 @@ class Runner:
             try:
                 context.route("**/*", lambda route: self._route(route, result))
                 page = context.pages[0] if context.pages else context.new_page()
+                log.info("browser: %s", page.evaluate(BROWSER_FACTS))
                 page.on("framenavigated", lambda f: f == page.main_frame and log.info("page %s%s", urlsplit(f.url).hostname or "", url_pattern(f.url)))
                 page.on("response", lambda r: r.request.method == "POST" and log.info("POST %s %s%s", r.status, urlsplit(r.url).hostname or "", url_pattern(r.url)))
                 context.on("page", self._on_new_page)
@@ -413,8 +428,37 @@ class Runner:
                 self._used_secrets.clear()
                 context.close()
 
+    def _pause(self, page, low_ms: int, high_ms: int) -> None:
+        if self.config.human_pacing:
+            page.wait_for_timeout(random.randint(low_ms, high_ms))
+
+    def _click(self, page, loc, t: int) -> None:
+        """Move the mouse to a random point inside the element, then click."""
+        if self.config.human_pacing:
+            loc.wait_for(state="visible", timeout=t)
+            box = loc.bounding_box()
+            if box:
+                x = box["x"] + box["width"] * random.uniform(0.3, 0.7)
+                y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
+                page.mouse.move(x, y, steps=random.randint(8, 20))
+                self._pause(page, 80, 250)
+        loc.click(timeout=t)
+
+    def _type(self, page, loc, value: str, t: int) -> None:
+        """Click into the field and type key by key with uneven gaps."""
+        if not self.config.human_pacing:
+            loc.fill(value, timeout=t)
+            return
+        self._click(page, loc, t)
+        loc.fill("", timeout=t)
+        for ch in value:
+            page.keyboard.type(ch)
+            page.wait_for_timeout(random.randint(60, 190) if random.random() > 0.08 else random.randint(250, 500))
+
     def _run_phase(self, page, phase: str, steps, result: RunResult) -> bool:
         for i, step in enumerate(steps):
+            if i:
+                self._pause(page, 500, 1600)
             log.info("[%s %d] %s", phase, i, step.intent)
             try:
                 self._run_step(page, step, result)

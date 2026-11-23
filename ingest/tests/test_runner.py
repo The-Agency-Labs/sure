@@ -37,6 +37,7 @@ def make_runner(tmp_path, data, secrets=SECRETS, codes=None):
         headless=True,
         channel=None,
         step_timeout_ms=3000,
+        human_pacing=False,
     )
     notifier = NullNotifier()
     runner = Runner(Script.parse(data), cfg, DictStore(secrets), codes or Codes(), notifier)
@@ -406,3 +407,12 @@ def test_dismiss_with_escape_closes_a_popup_without_clicking_it(tmp_path):
         result = runner.run()
     assert result.ok, result.error
     assert bank.hits["GET /help-signup"] == 0
+
+
+def test_human_pacing_types_the_same_values_and_finishes(tmp_path):
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, fakebank.script_dict(bank.url))
+        runner.config.human_pacing = True
+        result = runner.run()
+    assert result.ok, result.error
+    assert result.downloads
