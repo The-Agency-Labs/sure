@@ -14,13 +14,16 @@ ENTRYPOINT ["python", "-m", "ingest"]
 
 FROM base AS scraper
 # Real Google Chrome (not the bundled Chromium) in headed mode under Xvfb.
-# (curl is only for Playwright's Chrome installer.)
+# (curl is only for Playwright's Chrome installer.) x11vnc + noVNC are for
+# attend.sh: the owner signs in live in the bank's profile, seen in a browser.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libatomic1 xvfb xauth ca-certificates curl \
+    x11vnc novnc websockify \
  && playwright install --with-deps chrome \
  && apt-get purge -y curl && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 COPY deploy/ingest/scraper-entrypoint.sh /usr/local/bin/scraper-entrypoint
+COPY deploy/ingest/scraper-attend.sh /usr/local/bin/scraper-attend
 USER 2001:2000
 ENV HOME=/tmp/home
 ENTRYPOINT ["/usr/local/bin/scraper-entrypoint"]
