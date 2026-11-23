@@ -389,6 +389,8 @@ class Runner:
             try:
                 context.route("**/*", lambda route: self._route(route, result))
                 page = context.pages[0] if context.pages else context.new_page()
+                page.on("framenavigated", lambda f: f == page.main_frame and log.info("page %s%s", urlsplit(f.url).hostname or "", url_pattern(f.url)))
+                page.on("response", lambda r: r.request.method == "POST" and log.info("POST %s %s%s", r.status, urlsplit(r.url).hostname or "", url_pattern(r.url)))
                 context.on("page", self._on_new_page)
                 if not self._run_phase(page, "login", self.script.login, result):
                     return result
