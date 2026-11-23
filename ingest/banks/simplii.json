@@ -10,14 +10,15 @@
     "Sure account in ingest.json \"accounts\" as \"simplii:<name>\".",
     "Allowlist from the first VM runs (2026-11-18): Simplii's own hosts only. The POST with a random five-part path on online.simplii.com is Akamai's bot check; sign-in never starts without it. Analytics, marketing and chat (go-mpulse, adobedtm, braze/appboy, ada.support) stay blocked. w-profiling.simplii.com is Simplii's ThreatMetrix device check (allowed, it's the bank's own host); the third-party online-metrix.net hosts it calls stay blocked unless sign-in turns out to need them. POSTs to Simplii's own JSON API (ebm-anp/api/vN/json/) are allowed: sign-in, code send/check and the download screens all use it, with names that vary; the money-moving blocks (DEFAULT_BLOCK and this script's block list) still apply.",
     "Download Transactions is reached by its own address after sign-in (the Extras link only shows as a left-hand panel in wide windows, and in the Banking menu otherwise). Each account is then picked on that same page.",
-    "The CSV comes from a POST to ebm-ai/api/vN/json/downloadTransactions; only that endpoint of ebm-ai is allowed."
+    "The CSV comes from ebm-ai/api/vN/json/downloadTransactions: a POST, then a form submit (a navigation) to .../downloadTransactions/file/<id> that returns the file. Only those two ebm-ai addresses are allowed."
   ],
   "institution": "simplii",
   "currency": "CAD",
   "allowlist": {
     "navigation": [
       "^https://online\\.simplii\\.com/ebm-resources/public/",
-      "^https://w-profiling\\.simplii\\.com/"
+      "^https://w-profiling\\.simplii\\.com/",
+      "(?i)^https://online\\.simplii\\.com/ebm-ai/api/v\\d+/json/downloadtransactions/file/"
     ],
     "hosts": [
       "online.simplii.com",
