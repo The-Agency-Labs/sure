@@ -39,8 +39,9 @@ Every account in a dropdown: set ``for_each_account`` on the script to that
 dropdown's locator. The steps phase then runs once per account listed in it
 (placeholder entries with no value are skipped). The select step on that
 dropdown uses ``"option": "{account}"``, and every save_as uses ``{account}``,
-which becomes the account's label in lower case with dashes
-("No Fee Chequing 1234" -> "no-fee-chequing-1234"). That is the account_ref
+which becomes the label's words plus the last 4 digits of the account number,
+never the full number or a balance ("No Fee Chequing 12345-67890 $15.00" ->
+"no-fee-chequing-7890"). That is the account_ref
 the loader maps to a Sure account, so a new account at the bank downloads on
 its own and waits in review until it is mapped.
 """
@@ -56,9 +57,19 @@ from typing import Any
 ACCOUNT = "{account}"
 
 
+_AMOUNT = re.compile(r"-?\$?\s?-?\d[\d,]*\.\d{2}(?!\d)")
+
+
 def account_ref(label: str) -> str:
-    """An account's label as a file-name-safe account_ref: "Visa 9911" -> "visa-9911"."""
-    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+    """A stable, file-name-safe name for an account from its dropdown label:
+    its words plus the last 4 digits of its number. Amounts (the balance some
+    banks put in the label) are dropped, and so is the rest of the number.
+      "No Fee Chequing Account 12345-67890 $1,015.00" -> "no-fee-chequing-account-7890"
+    """
+    text = _AMOUNT.sub(" ", label)
+    words = re.findall(r"[a-z]+", text.lower())
+    digits = "".join(re.findall(r"\d", text))
+    return "-".join(words + ([digits[-4:]] if digits else []))
 
 
 ACTIONS = {"scroll", "goto", "fill", "click", "wait", "dismiss", "expect", "mfa", "download", "balance", "select"}

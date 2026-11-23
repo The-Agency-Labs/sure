@@ -322,7 +322,7 @@ def test_every_account_in_the_dropdown_is_downloaded(tmp_path):
         result = runner.run()
     assert result.ok, result.error
     assert bank.exports == ["acct=a1&fmt=CSV", "acct=a2&fmt=CSV"]  # a3 has nothing to download
-    assert [p.name.split("__")[0] for p in result.downloads] == ["chequing-4455-1234", "visa-ending-9911"]
+    assert [p.name.split("__")[0] for p in result.downloads] == ["chequing-1234", "visa-ending-9911"]
 
 
 def test_every_account_script_must_name_files_per_account(tmp_path):

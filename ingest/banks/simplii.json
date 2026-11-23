@@ -126,9 +126,9 @@
     },
     {
       "action": "click",
-      "intent": "use the default date range",
+      "intent": "choose \"All within date range\" (click its label: the radio button sits under it)",
       "locator": {
-        "css": "[data-test-id=\"display-date-range-input\"]"
+        "css": "[data-test-id=\"display-date-range-label\"]"
       }
     },
     {
