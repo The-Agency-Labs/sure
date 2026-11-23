@@ -88,3 +88,17 @@ def test_blocking_check_catches_fake_secrets(leak):
 
 def test_short_amounts_do_not_cause_false_alarms():
     blocking_check('- button "Page 4"', [], [Decimal("4.25")])
+
+
+def test_long_numbers_never_reach_the_log():
+    import logging
+
+    from ingest.scrub import LongNumberFilter, mask_long_numbers
+
+    assert mask_long_numbers("account-1234567890-15-00") == "account-[number]"
+    assert mask_long_numbers("card 4111-1111-1111-1234 and 4111 1111 1111 1234") == "card [number] and [number]"
+    assert mask_long_numbers("acct 12345-67890") == "acct [number]"
+    assert mask_long_numbers("saved visa-card-1234__2026-11-23.csv at 02:56:24") == "saved visa-card-1234__2026-11-23.csv at 02:56:24"
+    record = logging.LogRecord("t", logging.INFO, __file__, 1, "found %s", ("chequing-1234567890",), None)
+    LongNumberFilter().filter(record)
+    assert record.getMessage() == "found chequing-[number]"

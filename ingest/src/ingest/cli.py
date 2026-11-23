@@ -319,6 +319,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     os.umask(0o027)  # nothing we write is world-readable
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from .scrub import LongNumberFilter
+
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(LongNumberFilter())
     cfg = {} if getattr(args, "no_config", False) else load_config(args.config)
     return args.fn(args, cfg)
 

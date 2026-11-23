@@ -15,6 +15,7 @@ Input is Playwright's ARIA snapshot format (``locator.aria_snapshot()``):
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from decimal import Decimal
@@ -157,3 +158,22 @@ def blocking_check(text: str, values: list[str], amounts: list[Decimal]) -> None
         # Don't echo the value itself; say how many and what kind.
         kinds = sorted({"number" if h.isdigit() else "text" for h in hits})
         raise SensitiveValueFound(f"{len(hits)} sensitive value(s) found ({', '.join(kinds)}); not sending")
+
+
+# Any run of 8+ digits, allowing single spaces or dashes between them: account
+# and card numbers in whatever form a bank prints them. ISO dates are kept.
+_LONG_NUMBER = re.compile(r"(?<![\d])\d(?:[ -]?\d){7,}(?![\d])")
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def mask_long_numbers(text: str) -> str:
+    return _LONG_NUMBER.sub(lambda m: m.group(0) if _ISO_DATE.fullmatch(m.group(0)) else "[number]", text)
+
+
+class LongNumberFilter(logging.Filter):
+    """Keeps account and card numbers out of every log line, whatever produced them."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = mask_long_numbers(record.getMessage())
+        record.args = None
+        return True
