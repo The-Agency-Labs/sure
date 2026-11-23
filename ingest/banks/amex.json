@@ -105,6 +105,14 @@
   ],
   "steps": [
     {
+      "action": "dismiss",
+      "intent": "close the advertisement pop-up after sign-in if shown",
+      "locator": {
+        "role": "dialog"
+      },
+      "key": "Escape"
+    },
+    {
       "action": "click",
       "intent": "open the Statement menu in the header",
       "locator": {
