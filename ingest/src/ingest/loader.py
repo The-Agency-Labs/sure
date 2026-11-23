@@ -64,11 +64,12 @@ class Loader:
 
     def account_id(self, institution: str, account_ref: str) -> str:
         key = f"{institution}:{account_ref}"
-        name = self.config.get("accounts", {}).get(key)
+        name = (self.config.get("accounts", {}).get(key) or "").strip()
         if not name:
             raise ParseError(f"no Sure account mapped for {key} in loader config 'accounts'")
         if self._account_ids is None:
-            self._account_ids = {a["name"]: a["id"] for a in self.client.accounts()}
+            # Names compare without surrounding spaces: "Simplii " in Sure is "Simplii".
+            self._account_ids = {a["name"].strip(): a["id"] for a in self.client.accounts()}
         if name not in self._account_ids:
             raise ParseError(f"Sure has no account named {name!r} (mapped from {key})")
         return self._account_ids[name]

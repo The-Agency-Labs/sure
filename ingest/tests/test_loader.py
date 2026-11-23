@@ -12,7 +12,8 @@ from ingest.loader import Loader
 from ingest.sure import SureClient
 
 KEY = "test-key"
-ACCOUNTS = [{"id": "11111111-1111-1111-1111-111111111111", "name": "Test Chequing"},
+# "Test Chequing " has a trailing space, as names typed into Sure sometimes do.
+ACCOUNTS = [{"id": "11111111-1111-1111-1111-111111111111", "name": "Test Chequing "},
             {"id": "22222222-2222-2222-2222-222222222222", "name": "Test Pension"}]
 
 
