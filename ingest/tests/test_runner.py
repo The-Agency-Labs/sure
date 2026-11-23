@@ -416,3 +416,23 @@ def test_human_pacing_types_the_same_values_and_finishes(tmp_path):
         result = runner.run()
     assert result.ok, result.error
     assert result.downloads
+
+
+def test_test_ids_are_listed_when_the_page_disables_eval(tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    runner, _ = make_runner(tmp_path, fakebank.script_dict("http://127.0.0.1:1"))
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page()
+        page.set_content(
+            '<button data-testid="submit-button">Go</button>'
+            '<div data-testid="myca/Table/latest-transactions/2026-11-04/download-button">x</div>'
+            '<span data-testid="Jane Doe">n</span>'
+            '<script>window.eval = () => { throw new Error("eval is disabled") }</script>'
+        )
+        ids = runner._test_ids(page)
+        browser.close()
+    assert "submit-button" in ids
+    assert "myca/Table/latest-transactions/#-11-04/download-button" in ids
+    assert not any("Jane" in i for i in ids)

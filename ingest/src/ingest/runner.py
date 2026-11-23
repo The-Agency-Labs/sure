@@ -356,7 +356,7 @@ class Runner:
             except PlaywrightError as exc:
                 snapshot = f"(snapshot unavailable: {type(exc).__name__}: {mask_long_numbers(str(exc).splitlines()[0][:120])})"
             try:
-                test_ids = page.evaluate(TEST_ID_INVENTORY)
+                test_ids = self._test_ids(page)
             except PlaywrightError as exc:
                 test_ids = [f"(unavailable: {type(exc).__name__}: {mask_long_numbers(str(exc).splitlines()[0][:160])})"]
             if phase != "login" and self.config.failure_screenshots:
@@ -414,7 +414,7 @@ class Runner:
                 context.route("**/*", lambda route: self._route(route, result))
                 page = context.pages[0] if context.pages else context.new_page()
                 log.info("browser: %s", page.evaluate(BROWSER_FACTS))
-                page.on("framenavigated", lambda f: f == page.main_frame and log.info("page %s%s", urlsplit(f.url).hostname or "", url_pattern(f.url)))
+                page.on("framenavigated", lambda f: log.info("%s %s%s", "page" if f == page.main_frame else "frame", urlsplit(f.url).hostname or "", url_pattern(f.url)) if f.url.startswith("http") else None)
                 page.on("response", lambda r: r.request.method == "POST" and log.info("POST %s %s%s", r.status, urlsplit(r.url).hostname or "", url_pattern(r.url)))
                 context.on("page", self._on_new_page)
                 if not self._run_phase(page, "login", self.script.login, result):
@@ -431,6 +431,25 @@ class Runner:
             finally:
                 self._used_secrets.clear()
                 context.close()
+
+    def _test_ids(self, page) -> list[str]:
+        """Developer labels on the page, read through element queries rather
+        than a script in the page: some sites disable eval, which page.evaluate
+        needs. Labels only (no spaces); long digit runs masked."""
+        try:
+            return page.evaluate(TEST_ID_INVENTORY)
+        except PlaywrightError as exc:
+            if "eval" not in str(exc):
+                raise
+        out: list[str] = []
+        for el in page.locator("[data-test-id],[data-testid]").all()[:400]:
+            ident = el.get_attribute("data-test-id") or el.get_attribute("data-testid") or ""
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]{0,127}", ident):
+                continue
+            entry = re.sub(r"\d{4,}", "#", ident) + ("" if el.is_visible() else " (hidden)")
+            if entry not in out:
+                out.append(entry)
+        return out
 
     def _pause(self, page, low_ms: int, high_ms: int) -> None:
         if self.config.human_pacing:
