@@ -1,0 +1,166 @@
+{
+  "_notes": [
+    "Recorded 2026-11-17 with `ingest record` (real Chrome). Not yet run on the VM.",
+    "Unverified until the first VM run: the allowlist's POST patterns and extra hosts",
+    "(an unlisted request is aborted in the browser and logged by path shape, so the",
+    "first runs reveal them without anything reaching the bank). Verification screen taken from",
+    "screenshots: \"Push to your device\" is preselected, Send, then a 6-digit code and Next; no remember box.",
+    "Every account in the download dropdown is fetched (for_each_account). Files are named",
+    "after the account's label, e.g. no-fee-chequing-1234__<date>.csv; map each name to a",
+    "Sure account in ingest.json \"accounts\" as \"simplii:<name>\".",
+    "Allowlist from the first VM runs (2026-11-18): Simplii's own hosts only. The POST with a random five-part path on online.simplii.com is Akamai's bot check; sign-in never starts without it. Analytics, marketing and chat (go-mpulse, adobedtm, braze/appboy, ada.support) stay blocked. w-profiling.simplii.com is Simplii's ThreatMetrix device check (allowed, it's the bank's own host); the third-party online-metrix.net hosts it calls stay blocked unless sign-in turns out to need them. POSTs to Simplii's own JSON API (ebm-anp/api/vN/json/) are allowed: sign-in, code send/check and the download screens all use it, with names that vary; the money-moving blocks (DEFAULT_BLOCK and this script's block list) still apply.",
+    "Download Transactions is reached by its own address after sign-in (the Extras link only shows as a left-hand panel in wide windows, and in the Banking menu otherwise). Each account is then picked on that same page.",
+    "The CSV comes from ebm-ai/api/vN/json/downloadTransactions: a POST, then a form submit (a navigation) to .../downloadTransactions/file/<id> that returns the file. Only those two ebm-ai addresses are allowed."
+  ],
+  "institution": "simplii",
+  "currency": "CAD",
+  "allowlist": {
+    "navigation": [
+      "^https://online\\.simplii\\.com/ebm-resources/public/",
+      "^https://w-profiling\\.simplii\\.com/",
+      "(?i)^https://online\\.simplii\\.com/ebm-ai/api/v\\d+/json/downloadtransactions/file/"
+    ],
+    "hosts": [
+      "online.simplii.com",
+      "www.simplii.com",
+      "w-profiling.simplii.com",
+      "www.cibc.com"
+    ],
+    "post": [
+      "^https://online\\.simplii\\.com/ebm-anp/api/v\\d+/json/",
+      "^https://online\\.simplii\\.com/(?!ebm-)[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+){4}$",
+      "(?i)^https://online\\.simplii\\.com/ebm-ai/api/v\\d+/json/downloadtransactions(\\?|$)"
+    ],
+    "block": [
+      "#/(move-money|pay|send)",
+      "upcoming-transactions"
+    ]
+  },
+  "for_each_account": {
+    "css": "[data-test-id=\"account-dropdown-select\"]"
+  },
+  "login": [
+    {
+      "action": "goto",
+      "intent": "open the sign-on page",
+      "url": "https://online.simplii.com/ebm-resources/public/simplii/online-banking/client/index.html"
+    },
+    {
+      "action": "dismiss",
+      "intent": "accept the cookie banner if shown",
+      "locator": {
+        "role": "button",
+        "name": "Accept all cookies"
+      }
+    },
+    {
+      "action": "fill",
+      "intent": "enter the card number",
+      "locator": {
+        "css": "[data-test-id=\"card-number-input\"]"
+      },
+      "secret": "simplii/username"
+    },
+    {
+      "action": "fill",
+      "intent": "enter the password",
+      "locator": {
+        "css": "[data-test-id=\"password-input\"]"
+      },
+      "secret": "simplii/password"
+    },
+    {
+      "action": "click",
+      "intent": "submit the sign-on form",
+      "locator": {
+        "css": "[data-test-id=\"primary-button\"]"
+      }
+    },
+    {
+      "action": "mfa",
+      "intent": "answer a one-time verification code if asked",
+      "detect": {
+        "role": "heading",
+        "name": "Verify your identity"
+      },
+      "request": {
+        "role": "button",
+        "name": "Send",
+        "exact": true
+      },
+      "input": {
+        "label": "Enter the one-time verification code"
+      },
+      "submit": {
+        "role": "button",
+        "name": "Next",
+        "exact": true
+      },
+      "timeout_ms": 8000
+    },
+    {
+      "action": "expect",
+      "intent": "land on the signed-in pages",
+      "locator": {
+        "css": "[data-test-id=\"global-nav-banking\"]"
+      }
+    },
+    {
+      "action": "goto",
+      "intent": "open Download Transactions (the address its Extras link points to)",
+      "url": "https://online.simplii.com/ebm-resources/public/simplii/online-banking/services/client/index.html#/services/download-transactions"
+    },
+    {
+      "action": "expect",
+      "intent": "on the download page",
+      "locator": {
+        "css": "[data-test-id=\"account-dropdown-select\"]"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "action": "select",
+      "intent": "choose the next account",
+      "locator": {
+        "css": "[data-test-id=\"account-dropdown-select\"]"
+      },
+      "option": "{account}"
+    },
+    {
+      "action": "click",
+      "intent": "choose \"All within date range\" with Simplii's default dates (its latest window)",
+      "locator": {
+        "css": "[data-test-id=\"display-date-range-label\"]"
+      },
+      "history": "recent"
+    },
+    {
+      "action": "click",
+      "intent": "choose \"All available\" (full history; the loader skips what it already has)",
+      "locator": {
+        "css": "[data-test-id=\"display-all-available-label\"]"
+      },
+      "history": "full"
+    },
+    {
+      "action": "select",
+      "intent": "choose CSV",
+      "locator": {
+        "css": "[data-test-id=\"software-dropdown-select\"]"
+      },
+      "option": "CSV"
+    },
+    {
+      "action": "download",
+      "intent": "download this account's transactions",
+      "locator": {
+        "css": "[data-test-id=\"download-transactions-btn\"]"
+      },
+      "save_as": "{account}__{today}.{ext}",
+      "empty": {
+        "text": "There are no transactions found that meet your request"
+      }
+    }
+  ]
+}

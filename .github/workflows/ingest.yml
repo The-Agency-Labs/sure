@@ -1,0 +1,27 @@
+name: ingest
+
+on:
+  push:
+    paths: ["ingest/**", ".github/workflows/ingest.yml"]
+  pull_request:
+    paths: ["ingest/**", ".github/workflows/ingest.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ingest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Install
+        run: python3 -m venv .venv && .venv/bin/pip install . pytest
+      - name: Install Chromium for the fake-bank tests
+        run: .venv/bin/playwright install --with-deps chromium
+      - name: Test
+        run: .venv/bin/pytest -q
