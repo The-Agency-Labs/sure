@@ -23,6 +23,6 @@ websockify --web /usr/share/novnc 0.0.0.0:6080 localhost:5900 >/dev/null 2>&1 &
 
 # Same command line as the nightly runner (runner.chrome_command): keep in step.
 google-chrome --user-data-dir="$PROFILE" --lang="${INGEST_LOCALE:-en-US}" --password-store=basic \
-  --no-first-run --no-default-browser-check \
+  --no-first-run --no-default-browser-check --disable-blink-features=AutomationControlled \
   --window-position=0,0 --window-size=1920,1080 "$URL" >/dev/null 2>&1
 echo "Chrome closed; the $BANK profile is saved."

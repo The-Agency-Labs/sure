@@ -114,8 +114,10 @@ def chrome_command(cfg: RunConfig) -> list[str]:
     """The sign-in window's command line (deploy/ingest/scraper-attend.sh), so
     the bank sees the same browser in both. Keep the two in step. Only
     --remote-debugging-port is added (port 0: Chrome picks a free random port
-    on 127.0.0.1); unlike --enable-automation or --remote-debugging-pipe it
-    leaves navigator.webdriver false."""
+    on 127.0.0.1). Chrome 158 sets navigator.webdriver for any DevTools port,
+    and Emulation.setAutomationOverride can't clear it; turning off the
+    AutomationControlled feature does (tested: pages, iframes, new tabs). The
+    sign-in window passes that flag too, so both command lines stay the same."""
     cmd = [
         cfg.chrome_binary,
         f"--user-data-dir={cfg.profile_dir}",
@@ -125,6 +127,7 @@ def chrome_command(cfg: RunConfig) -> list[str]:
         "--no-default-browser-check",
         "--window-position=0,0",
         "--window-size=1920,1080",
+        "--disable-blink-features=AutomationControlled",
         "--remote-debugging-port=0",
     ]
     if cfg.headless:

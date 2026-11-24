@@ -130,7 +130,9 @@ via `accounts` in `ingest.json`.
   the `attend.sh` sign-in window (same profile), then attaches Playwright over the
   DevTools port, so none of Playwright's ~20 launch flags (extensions off, background
   updates off, `--enable-automation`, ...) are there and `navigator.webdriver` is false.
-  The one addition is `--remote-debugging-port=0` (a random local port). Set
+  The one addition is `--remote-debugging-port=0` (a random local port). Chrome 158
+  sets `navigator.webdriver` for any DevTools port, so both windows also pass
+  `--disable-blink-features=AutomationControlled`, which keeps it false (tested). Set
   `browser.attach: false` to go back to Playwright launching Chrome. This
   avoids the obvious tells. It doesn't defeat serious fingerprinting; the persistent
   profile is what does most of the work.

@@ -466,4 +466,4 @@ def test_chrome_command_matches_the_sign_in_window(tmp_path):
     attend = (Path(__file__).parents[1] / "deploy/ingest/scraper-attend.sh").read_text()
     for flag in cmd[2:-2]:  # after binary + profile, before the debug port + URL
         assert flag.split("=")[0] in attend, flag
-    assert not any(f.startswith(("--enable-automation", "--disable-", "--remote-debugging-pipe")) for f in cmd)
+    assert not any(f.startswith(("--enable-automation", "--disable-extensions", "--remote-debugging-pipe")) for f in cmd)
