@@ -23,8 +23,7 @@ RUN apt-get update \
  && apt-get purge -y curl && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 # Patchright drives Chrome without Playwright's page-level tells (Runtime.enable).
-# Same deps as Playwright (pyee, greenlet), already installed: --no-deps keeps
-# the hash check to the one pinned file.
+# --no-deps: every package it adds is listed and hash-pinned in that file.
 COPY deploy/ingest/patchright.txt /tmp/patchright.txt
 RUN pip install --no-deps --require-hashes -r /tmp/patchright.txt && rm /tmp/patchright.txt
 ENV INGEST_BROWSER_DRIVER=patchright

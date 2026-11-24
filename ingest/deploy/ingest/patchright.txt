@@ -3,3 +3,7 @@
 # Reviewed 2026-11-23 against playwright-core 1.64.1: same bundled node binary,
 # no new hosts or IPs, Python layer only reformatted docs. Re-review before bumping.
 patchright==1.64.4 --hash=sha256:a580aee16e89ef2552c67e8f388bbaf1b7d31b4b51211a1d4b584302b9feb69f
+# Its dependencies the image doesn't already have (Playwright 1.65 dropped pyee;
+# greenlet is shared). Pure-Python wheels, also hash-pinned.
+pyee==14.0.0 --hash=sha256:3ac2d3229a9677f7de2c33d7f52fe25b638a46b19c413fea2edc8c6d0a644e4d
+typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
