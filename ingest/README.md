@@ -125,8 +125,13 @@ via `accounts` in `ingest.json`.
   instead, set `"form"`: it serves a one-time page (random URL token) on `MFA_BIND`
   and sends its link in the push.
 - **Not announcing automation:** real Chrome, headed under Xvfb (so no "HeadlessChrome"
-  user agent), real window size, locale and timezone from `.env`, and Playwright's
-  `--enable-automation` removed, so `navigator.webdriver` is false (tested). This
+  user agent), real window size, locale and timezone from `.env`. Playwright doesn't
+  launch Chrome: the runner starts plain `google-chrome` with the same command line as
+  the `attend.sh` sign-in window (same profile), then attaches Playwright over the
+  DevTools port, so none of Playwright's ~20 launch flags (extensions off, background
+  updates off, `--enable-automation`, ...) are there and `navigator.webdriver` is false.
+  The one addition is `--remote-debugging-port=0` (a random local port). Set
+  `browser.attach: false` to go back to Playwright launching Chrome. This
   avoids the obvious tells. It doesn't defeat serious fingerprinting; the persistent
   profile is what does most of the work.
 - **Containers:** non-root UIDs, `cap_drop: ALL`, `no-new-privileges`, read-only

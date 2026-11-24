@@ -16,6 +16,9 @@ import logging
 import os
 import random
 import re
+import subprocess
+import time
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -42,6 +45,13 @@ class RunConfig:
     profile_dir: Path
     bundle_root: Path
     headless: bool = False
+    # Start Chrome ourselves with the same plain command line as attend.sh's
+    # sign-in window, then connect Playwright to it, instead of letting
+    # Playwright launch it with its ~20 extra flags (extensions off, background
+    # networking off, ...) that a person's Chrome never has. Off = Playwright
+    # launches `channel` itself (the tests, which use the bundled Chromium).
+    attach: bool = True
+    chrome_binary: str = "google-chrome"
     channel: str | None = "chrome"
     # Chrome's own process sandbox (renderer isolation). A security control, not
     # a stealth one: with it off, a hostile page that exploits the renderer can
@@ -98,6 +108,85 @@ TEST_ID_INVENTORY = """() => {
   }
   return out;
 }"""
+
+
+def chrome_command(cfg: RunConfig) -> list[str]:
+    """The sign-in window's command line (deploy/ingest/scraper-attend.sh), so
+    the bank sees the same browser in both. Keep the two in step. Only
+    --remote-debugging-port is added (port 0: Chrome picks a free random port
+    on 127.0.0.1); unlike --enable-automation or --remote-debugging-pipe it
+    leaves navigator.webdriver false."""
+    cmd = [
+        cfg.chrome_binary,
+        f"--user-data-dir={cfg.profile_dir}",
+        f"--lang={cfg.locale or 'en-US'}",
+        "--password-store=basic",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--window-position=0,0",
+        "--window-size=1920,1080",
+        "--remote-debugging-port=0",
+    ]
+    if cfg.headless:
+        cmd.append("--headless=new")
+    if not cfg.chromium_sandbox:
+        cmd.append("--no-sandbox")
+    return cmd + ["about:blank"]
+
+
+def chrome_env(cfg: RunConfig) -> dict[str, str]:
+    """Timezone and language come from the process environment, as in the
+    sign-in window: an attached browser can't be given Playwright's overrides."""
+    env = dict(os.environ)
+    if cfg.timezone_id:
+        env["TZ"] = cfg.timezone_id
+    if cfg.locale:
+        env["LANG"] = cfg.locale.replace("-", "_") + ".UTF-8"
+    return env
+
+
+def start_chrome(cfg: RunConfig, timeout_s: float = 30) -> tuple[subprocess.Popen, str]:
+    """Start plain Chrome on the profile; return it and its DevTools address."""
+    port_file = cfg.profile_dir / "DevToolsActivePort"
+    port_file.unlink(missing_ok=True)
+    proc = subprocess.Popen(
+        chrome_command(cfg), env=chrome_env(cfg),
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"Chrome exited at start (status {proc.returncode})")
+        try:
+            port = port_file.read_text().split("\n", 1)[0].strip()
+        except FileNotFoundError:
+            port = ""
+        if port.isdigit():
+            return proc, f"http://127.0.0.1:{port}"
+        time.sleep(0.2)
+    stop_chrome(proc, None)
+    raise RuntimeError("Chrome did not open its DevTools port in time")
+
+
+def stop_chrome(proc: subprocess.Popen, browser) -> None:
+    """Close Chrome the way its own X button does, so the profile (cookies,
+    remembered device) is written out; kill it only if it hangs."""
+    if browser is not None:
+        try:
+            browser.new_browser_cdp_session().send("Browser.close")
+        except PlaywrightError:
+            pass
+    if proc.poll() is None and browser is None:
+        proc.terminate()
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
 
 
 class Runner:
@@ -393,22 +482,8 @@ class Runner:
         # run that was killed; Chrome would otherwise refuse to start.
         for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
             (cfg.profile_dir / name).unlink(missing_ok=True)
-        with sync_playwright() as pw:
-            context = pw.chromium.launch_persistent_context(
-                str(cfg.profile_dir),
-                channel=cfg.channel,
-                headless=cfg.headless,
-                chromium_sandbox=cfg.chromium_sandbox,
-                # Look like the person's own Chrome, not a test harness: Playwright's
-                # --enable-automation sets navigator.webdriver and shows a banner.
-                ignore_default_args=["--enable-automation"],
-                args=["--disable-blink-features=AutomationControlled"]
-                + ([] if cfg.headless else ["--window-position=0,0", "--window-size=1920,1080"]),
-                no_viewport=not cfg.headless,  # real window size under Xvfb, not an emulated viewport
-                accept_downloads=True,
-                locale=cfg.locale,
-                timezone_id=cfg.timezone_id,
-            )
+        with sync_playwright() as pw, ExitStack() as cleanup:
+            context = self._open_browser(pw, cleanup)
             page = None
             try:
                 context.route("**/*", lambda route: self._route(route, result))
@@ -430,7 +505,34 @@ class Runner:
                 return result
             finally:
                 self._used_secrets.clear()
-                context.close()
+
+    def _open_browser(self, pw, cleanup: ExitStack):
+        """The browser context for this run; `cleanup` closes it at the end."""
+        cfg = self.config
+        if not cfg.attach:
+            context = pw.chromium.launch_persistent_context(
+                str(cfg.profile_dir),
+                channel=cfg.channel,
+                headless=cfg.headless,
+                chromium_sandbox=cfg.chromium_sandbox,
+                # Playwright's --enable-automation sets navigator.webdriver and shows a banner.
+                ignore_default_args=["--enable-automation"],
+                args=["--disable-blink-features=AutomationControlled"]
+                + ([] if cfg.headless else ["--window-position=0,0", "--window-size=1920,1080"]),
+                no_viewport=not cfg.headless,  # real window size under Xvfb, not an emulated viewport
+                accept_downloads=True,
+                locale=cfg.locale,
+                timezone_id=cfg.timezone_id,
+            )
+            cleanup.callback(context.close)
+            return context
+        proc, endpoint = start_chrome(cfg)
+        holder: list = [None]
+        cleanup.callback(lambda: stop_chrome(proc, holder[0]))
+        holder[0] = browser = pw.chromium.connect_over_cdp(endpoint)
+        log.info("browser: plain %s, attached", cfg.chrome_binary)
+        # Chrome's own default context: the profile on disk, its real window size.
+        return browser.contexts[0]
 
     def _test_ids(self, page) -> list[str]:
         """Developer labels on the page, read through element queries rather

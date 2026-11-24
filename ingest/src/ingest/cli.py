@@ -101,6 +101,7 @@ def cmd_scrape(args, cfg) -> int:
         profile_dir=p["secrets"] / "profiles" / args.bank,
         bundle_root=p["bundles"],
         headless=browser.get("headless", False),
+        attach=browser.get("attach", True),
         channel=browser.get("channel", "chrome"),
         chromium_sandbox=browser.get("chromium_sandbox", True),
         locale=os.environ.get("INGEST_LOCALE") or browser.get("locale"),

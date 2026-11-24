@@ -1,5 +1,8 @@
 import json
+import os
+import shutil
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -35,6 +38,7 @@ def make_runner(tmp_path, data, secrets=SECRETS, codes=None):
         profile_dir=tmp_path / "profile",
         bundle_root=tmp_path / "bundles",
         headless=True,
+        attach=False,  # Playwright launches its bundled Chromium; see test_attached_chrome_*
         channel=None,
         step_timeout_ms=3000,
         human_pacing=False,
@@ -436,3 +440,30 @@ def test_test_ids_are_listed_when_the_page_disables_eval(tmp_path):
     assert "submit-button" in ids
     assert "myca/Table/latest-transactions/#-11-04/download-button" in ids
     assert not any("Jane" in i for i in ids)
+
+
+@pytest.mark.skipif(not shutil.which("google-chrome"), reason="needs Google Chrome installed")
+def test_attached_chrome_runs_the_fake_bank_and_saves_the_profile(tmp_path):
+    """Production path: plain google-chrome, Playwright attached over CDP."""
+    with fakebank.FakeBank() as bank:
+        runner, _ = make_runner(tmp_path, fakebank.script_dict(bank.url))
+        runner.config.attach = True
+        runner.config.chromium_sandbox = os.environ.get("INGEST_TEST_SANDBOX") == "1"
+        result = runner.run()
+    assert result.ok, result.error
+    assert result.downloads
+    # Chrome closed cleanly: the profile is on disk and unlocked.
+    profile = tmp_path / "profile"
+    assert (profile / "Default").is_dir()
+    assert not (profile / "SingletonLock").exists()
+
+
+def test_chrome_command_matches_the_sign_in_window(tmp_path):
+    from ingest.runner import chrome_command
+
+    cfg = RunConfig(raw_root=tmp_path, profile_dir=tmp_path / "p", bundle_root=tmp_path, locale="en-CA")
+    cmd = chrome_command(cfg)
+    attend = (Path(__file__).parents[1] / "deploy/ingest/scraper-attend.sh").read_text()
+    for flag in cmd[2:-2]:  # after binary + profile, before the debug port + URL
+        assert flag.split("=")[0] in attend, flag
+    assert not any(f.startswith(("--enable-automation", "--disable-", "--remote-debugging-pipe")) for f in cmd)
