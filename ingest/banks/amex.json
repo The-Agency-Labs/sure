@@ -34,6 +34,7 @@
       "^https://ucmapi\\.americanexpress\\.com/api/[^/?#]+/geo_location/check(\\?|$)",
       "^https://identityrelease\\.americanexpress\\.com/[^/?#]+/report/errors(\\?|$)",
       "^https://pirecommendation\\.americanexpress\\.com/amexsite/[^/?#]+/[^/?#]+/customers/treatments/decisions(\\?|$)",
+      "^https://iwmapapi\\.americanexpress\\.com/beacon(\\?|$)",
       "^https://www\\.(google|gstatic)\\.com/recaptcha/"
     ],
     "block": [
