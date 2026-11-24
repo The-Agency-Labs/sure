@@ -23,9 +23,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import TimeoutError as PlaywrightTimeout
-from playwright.sync_api import sync_playwright
+# The scraper image sets INGEST_BROWSER_DRIVER=patchright: Playwright with its
+# automation tells patched out (deploy/ingest/patchright.txt). Same API; its
+# own error classes, so they come from the same module.
+if os.environ.get("INGEST_BROWSER_DRIVER") == "patchright":
+    from patchright.sync_api import Error as PlaywrightError
+    from patchright.sync_api import TimeoutError as PlaywrightTimeout
+    from patchright.sync_api import sync_playwright
+else:
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+    from playwright.sync_api import sync_playwright
+
+DRIVER = os.environ.get("INGEST_BROWSER_DRIVER") or "playwright"
 
 from .notify import CodeProvider, MfaNeeded, Notifier
 from .scrub import mask_long_numbers, scrub_snapshot, url_pattern
@@ -533,7 +543,7 @@ class Runner:
         holder: list = [None]
         cleanup.callback(lambda: stop_chrome(proc, holder[0]))
         holder[0] = browser = pw.chromium.connect_over_cdp(endpoint)
-        log.info("browser: plain %s, attached", cfg.chrome_binary)
+        log.info("browser: plain %s, attached with %s", cfg.chrome_binary, DRIVER)
         # Chrome's own default context: the profile on disk, its real window size.
         return browser.contexts[0]
 

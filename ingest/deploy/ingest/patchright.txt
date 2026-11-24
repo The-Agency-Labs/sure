@@ -1,0 +1,5 @@
+# Scraper image only. Patchright = Playwright with its automation tells patched
+# out (no Runtime.enable on pages). Pinned with its hash: never auto-updates.
+# Reviewed 2026-11-23 against playwright-core 1.64.1: same bundled node binary,
+# no new hosts or IPs, Python layer only reformatted docs. Re-review before bumping.
+patchright==1.64.4 --hash=sha256:a580aee16e89ef2552c67e8f388bbaf1b7d31b4b51211a1d4b584302b9feb69f
