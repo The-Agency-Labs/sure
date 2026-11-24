@@ -30,7 +30,10 @@
       "^https://global\\.americanexpress\\.com/myca/logon/",
       "^https://www\\.americanexpress\\.com/akam/",
       "^https://www\\.americanexpress\\.com/(?!en-ca/)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+){8}$",
-      "^https://functions\\.americanexpress\\.com/[A-Za-z0-9_-]+(\\?|$)",
+      "^https://functions\\.americanexpress\\.com/[^/?#]+(\\?|$)",
+      "^https://ucmapi\\.americanexpress\\.com/api/[^/?#]+/geo_location/check(\\?|$)",
+      "^https://identityrelease\\.americanexpress\\.com/[^/?#]+/report/errors(\\?|$)",
+      "^https://pirecommendation\\.americanexpress\\.com/amexsite/[^/?#]+/[^/?#]+/customers/treatments/decisions(\\?|$)",
       "^https://www\\.(google|gstatic)\\.com/recaptcha/"
     ],
     "block": [
